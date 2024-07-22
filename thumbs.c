@@ -202,27 +202,89 @@ CLEANUP void tns_free(tns_t *tns)
 	cache_tmpfile = cache_tmpfile_base = NULL;
 }
 
+CLEANUP void tns_replace(tns_t *tns, fileinfo_t *tns_files, const int *cnt, int *sel, win_t *win, replaceflags_t flags)
+{
+	int zl = THUMB_SIZE;
+	if (flags & RF_KEEP_ZL)
+		zl = tns->zl;
+
+	tns_free(tns);
+
+	int len;
+	const char *homedir, *dsuffix = "";
+
+	if (cnt != NULL && *cnt > 0)
+		tns->thumbs = ecalloc(*cnt, sizeof(*tns->thumbs));
+	else
+		tns->thumbs = NULL;
+	tns->files = tns_files;
+	tns->cnt = cnt;
+	tns->initnext = tns->loadnext = 0;
+	tns->first = tns->end = tns->r_first = tns->r_end = 0;
+	tns->sel = sel;
+	tns->win = win;
+	tns->dirty = true;
+
+	tns->zl = zl;
+	tns_zoom(tns, 0);
+
+	if ((homedir = getenv("XDG_CACHE_HOME")) == NULL || homedir[0] == '\0') {
+		homedir = getenv("HOME");
+		dsuffix = "/.cache";
+	}
+	if (homedir != NULL) {
+		const char *s = "/nsxiv";
+		free(cache_dir);
+		len = strlen(homedir) + strlen(dsuffix) + strlen(s) + 1;
+		cache_dir = emalloc(len);
+		snprintf(cache_dir, len, "%s%s%s", homedir, dsuffix, s);
+		cache_tmpfile = emalloc(len + sizeof(TMP_NAME));
+		memcpy(cache_tmpfile, cache_dir, len - 1);
+		cache_tmpfile_base = cache_tmpfile + len - 1;
+	} else {
+		error(EXIT_FAILURE, 0, "Cache directory not found");
+	}
+}
+
 static Imlib_Image tns_scale_down(Imlib_Image im, int dim)
 {
 	int w, h;
-	float z, zw, zh;
 
 	imlib_context_set_image(im);
 	w = imlib_image_get_width();
 	h = imlib_image_get_height();
-	zw = (float)dim / (float)w;
-	zh = (float)dim / (float)h;
-	z = MIN(zw, zh);
-	z = MIN(z, 1.0);
 
-	if (z < 1.0) {
-		imlib_context_set_anti_alias(1);
-		im = imlib_create_cropped_scaled_image(0, 0, w, h,
-		                                       MAX(z * w, 1), MAX(z * h, 1));
-		if (im == NULL)
-			error(EXIT_FAILURE, ENOMEM, NULL);
-		imlib_free_image_and_decache();
-	}
+ 	if (SQUARE_THUMBS == false) { /* normal thumbs */
+ 		float z, zw, zh;
+ 		zw = (float) dim / (float) w;
+ 		zh = (float) dim / (float) h;
+ 		z = MIN(zw, zh);
+ 		z = MIN(z, 1.0);
+ 
+ 		if (z < 1.0) {
+ 			imlib_context_set_anti_alias(1);
+ 			im = imlib_create_cropped_scaled_image(
+				0, 0, w, h,
+				MAX(z * w, 1), MAX(z * h, 1));
+ 			if (im == NULL)
+ 				error(EXIT_FAILURE, ENOMEM, NULL);
+ 			imlib_free_image_and_decache();
+ 		}
+ 	} else { /* generate square thumbs */
+ 		int x = (w < h) ? 0 : (w - h) / 2;
+ 		int y = (w > h) ? 0 : (h - w) / 2;
+ 		int s = MIN(w, h);
+ 		if (dim < w || dim < h) {
+ 			imlib_context_set_anti_alias(1);
+ 			im = imlib_create_cropped_scaled_image(
+				x, y, s, s,
+			       	dim, dim);
+ 			if (im == NULL)
+ 				error(EXIT_FAILURE, ENOMEM, NULL);
+ 			imlib_free_image_and_decache();
+ 		}
+ 	}
+
 	return im;
 }
 
@@ -589,4 +651,10 @@ int tns_translate(tns_t *tns, int x, int y)
 		n = -1;
 
 	return n;
+}
+
+bool tns_toggle_squared(void)
+{
+	SQUARE_THUMBS = !SQUARE_THUMBS;
+	return true;
 }

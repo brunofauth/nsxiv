@@ -99,6 +99,10 @@ typedef enum {
 	FF_TN_INIT = 4
 } fileflags_t;
 
+typedef enum {
+	RF_KEEP_ZL = 1,
+} replaceflags_t;
+
 typedef struct {
 	const char *name; /* as given by user */
 	const char *path; /* always absolute, result of realpath(3) */
@@ -318,6 +322,7 @@ struct tns {
 void tns_clean_cache(void);
 void tns_init(tns_t*, fileinfo_t*, const int*, int*, win_t*);
 CLEANUP void tns_free(tns_t*);
+CLEANUP void tns_replace(tns_t*, fileinfo_t*, const int*, int*, win_t*, replaceflags_t);
 bool tns_load(tns_t*, int, bool, bool);
 void tns_unload(tns_t*, int);
 void tns_render(tns_t*);
@@ -327,6 +332,7 @@ bool tns_move_selection(tns_t*, direction_t, int);
 bool tns_scroll(tns_t*, direction_t, bool);
 bool tns_zoom(tns_t*, int);
 int tns_translate(tns_t*, int, int);
+bool tns_toggle_squared(void);
 
 
 /* util.c */
