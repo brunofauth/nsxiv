@@ -38,7 +38,7 @@ $(objs): Makefile config.mk nsxiv.h config.h commands.h
 options.o: version.h optparse.h
 window.o: icon/data.h utf8.h
 
-config.h:
+config.h: config.def.h
 	@echo "GEN $@"
 	cp config.def.h $@
 
