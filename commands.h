@@ -46,6 +46,7 @@ bool ct_reload_all(arg_t);
 bool ct_scroll(arg_t);
 bool ct_drag_mark_image(arg_t);
 bool ct_select(arg_t);
+bool ct_toggle_squared(arg_t);
 
 #ifdef INCLUDE_MAPPINGS_CONFIG
 /* global */
@@ -94,6 +95,7 @@ bool ct_select(arg_t);
 #define t_scroll { ct_scroll, MODE_THUMB }
 #define t_drag_mark_image { ct_drag_mark_image, MODE_THUMB }
 #define t_select { ct_select, MODE_THUMB }
+#define t_toggle_squared { ct_toggle_squared, MODE_THUMB }
 
 #endif /* _MAPPINGS_CONFIG */
 #endif /* COMMANDS_H */

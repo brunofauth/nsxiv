@@ -74,10 +74,14 @@ static const bool ALPHA_LAYER = false;
 #ifdef INCLUDE_THUMBS_CONFIG
 
 /* thumbnail sizes in pixels (width == height): */
-static const int thumb_sizes[] = { 32, 64, 96, 128, 160 };
+static const int thumb_sizes[] = { 32, 64, 96, 128, 160};
 
 /* thumbnail size at startup, index into thumb_sizes[]: */
 static const int THUMB_SIZE = 3;
+
+/* whether to show thumbnails in squares or respect their aspect ratio,
+ * toggleable with t_toggle_squared 's' keybinding in thumbnail mode */
+static bool SQUARE_THUMBS = true;
 
 #endif
 #ifdef INCLUDE_MAPPINGS_CONFIG
@@ -136,6 +140,7 @@ static const keymap_t keys[] = {
 	{ 0,            XK_l,             t_move_sel,           DIR_RIGHT },
 	{ 0,            XK_Right,         t_move_sel,           DIR_RIGHT },
 	{ 0,            XK_R,             t_reload_all,         None },
+	{ 0,            XK_s,             t_toggle_squared,     None },
 
 	{ 0,            XK_n,             i_navigate,           +1 },
 	{ 0,            XK_n,             i_scroll_to_edge,     DIR_LEFT | DIR_UP },

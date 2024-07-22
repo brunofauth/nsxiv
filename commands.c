@@ -415,11 +415,9 @@ bool ct_move_sel(arg_t dir)
 	return tns_move_selection(&tns, dir, prefix);
 }
 
-bool ct_reload_all(arg_t _)
+bool ct_reload_all(arg_t flags)
 {
-	tns_free(&tns);
-	tns_init(&tns, files, &filecnt, &fileidx, &win);
-	tns.dirty = true;
+	tns_replace(&tns, files, &filecnt, &fileidx, &win, flags);
 	return true;
 }
 
@@ -476,4 +474,12 @@ bool ct_select(arg_t _)
 	}
 
 	return dirty;
+}
+
+bool ct_toggle_squared(arg_t _)
+{
+	tns_toggle_squared();
+	ct_reload_all(RF_KEEP_ZL);
+
+	return true;
 }
