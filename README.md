@@ -7,10 +7,13 @@ upstream README.md
 
 * Added a toggle-able square thumbnail mode, which changes the program to 
   render pictures as either a cropped square image or a scaled down 
-  "usual-aspect ratio" image. This behavior that found on [this popular 
-  patch](), because, in that patch, when you try to display squared thumbnails, 
-  you get **upscaled** cropped versions of the "usual-aspect ratio" images (and 
-  those can get very grainy and ugly).
+  "usual-aspect ratio" image. This behavior is different from that found on 
+  [this popular 
+  patch](https://github.com/nsxiv/nsxiv-extra/tree/master/patches/square-thumbs), 
+  because, in that patch, when you try to display squared thumbnails, you get 
+  **upscaled** cropped versions of the "usual-aspect ratio" images (and those 
+  can get very grainy and ugly). In other words: my square thumbnails trade 
+  disk space for prettiness, that's the selling point!
 
 * Highlight markers are now big, loud, obnoxious and occupy a significant part 
   of each image, so that you never overlook them!
