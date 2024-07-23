@@ -18,6 +18,7 @@
  */
 
 #include "nsxiv.h"
+#include <Imlib2.h>
 #define INCLUDE_THUMBS_CONFIG
 #include "config.h"
 
@@ -164,7 +165,7 @@ void tns_init(tns_t *tns, fileinfo_t *tns_files, const int *cnt, int *sel, win_t
 	tns->win = win;
 	tns->dirty = false;
 
-	tns->zl = THUMB_SIZE;
+	tns->zoom_level = THUMB_SIZE;
 	tns_zoom(tns, 0);
 
 	if ((homedir = getenv("XDG_CACHE_HOME")) == NULL || homedir[0] == '\0') {
@@ -206,7 +207,7 @@ CLEANUP void tns_replace(tns_t *tns, fileinfo_t *tns_files, const int *cnt, int 
 {
 	int zl = THUMB_SIZE;
 	if (flags & RF_KEEP_ZL)
-		zl = tns->zl;
+		zl = tns->zoom_level;
 
 	tns_free(tns);
 
@@ -225,7 +226,7 @@ CLEANUP void tns_replace(tns_t *tns, fileinfo_t *tns_files, const int *cnt, int 
 	tns->win = win;
 	tns->dirty = true;
 
-	tns->zl = zl;
+	tns->zoom_level = zl;
 	tns_zoom(tns, 0);
 
 	if ((homedir = getenv("XDG_CACHE_HOME")) == NULL || homedir[0] == '\0') {
@@ -246,7 +247,7 @@ CLEANUP void tns_replace(tns_t *tns, fileinfo_t *tns_files, const int *cnt, int 
 	}
 }
 
-static Imlib_Image tns_scale_down(Imlib_Image im, int dim)
+static Imlib_Image tns_scale_down(Imlib_Image im, int max_side_size)
 {
 	int w, h;
 
@@ -254,36 +255,22 @@ static Imlib_Image tns_scale_down(Imlib_Image im, int dim)
 	w = imlib_image_get_width();
 	h = imlib_image_get_height();
 
- 	if (SQUARE_THUMBS == false) { /* normal thumbs */
- 		float z, zw, zh;
- 		zw = (float) dim / (float) w;
- 		zh = (float) dim / (float) h;
- 		z = MIN(zw, zh);
- 		z = MIN(z, 1.0);
- 
- 		if (z < 1.0) {
- 			imlib_context_set_anti_alias(1);
- 			im = imlib_create_cropped_scaled_image(
-				0, 0, w, h,
-				MAX(z * w, 1), MAX(z * h, 1));
- 			if (im == NULL)
- 				error(EXIT_FAILURE, ENOMEM, NULL);
- 			imlib_free_image_and_decache();
- 		}
- 	} else { /* generate square thumbs */
- 		int x = (w < h) ? 0 : (w - h) / 2;
- 		int y = (w > h) ? 0 : (h - w) / 2;
- 		int s = MIN(w, h);
- 		if (dim < w || dim < h) {
- 			imlib_context_set_anti_alias(1);
- 			im = imlib_create_cropped_scaled_image(
-				x, y, s, s,
-			       	dim, dim);
- 			if (im == NULL)
- 				error(EXIT_FAILURE, ENOMEM, NULL);
- 			imlib_free_image_and_decache();
- 		}
- 	}
+	float scale = (w < h) // Changed this to store a thumbnail that looks best in squared mode
+		? (float) max_side_size / (float) w
+		: (float) max_side_size / (float) h;
+	scale = MIN(scale, 1.0);
+
+	// This means the image is smaller than the requested maximum size
+	if (scale >= 1.0)
+		return im;
+
+	imlib_context_set_anti_alias(1);
+	im = imlib_create_cropped_scaled_image(
+		0, 0, w, h,
+		MAX(scale * w, 1), MAX(scale * h, 1));
+	if (im == NULL)
+		error(EXIT_FAILURE, ENOMEM, NULL);
+	imlib_free_image_and_decache();
 
 	return im;
 }
@@ -403,7 +390,7 @@ bool tns_load(tns_t *tns, int n, bool force, bool cache_only)
 	if (cache_only) {
 		imlib_free_image_and_decache();
 	} else {
-		t->im = tns_scale_down(im, thumb_sizes[tns->zl]);
+		t->im = tns_scale_down(im, thumb_sizes[tns->zoom_level]);
 		imlib_context_set_image(t->im);
 		t->w = imlib_image_get_width();
 		t->h = imlib_image_get_height();
@@ -464,7 +451,7 @@ void tns_render(tns_t *tns)
 {
 	thumb_t *t;
 	win_t *win;
-	int i, cnt, r, x, y;
+	int i, cnt, r, grid_x, grid_y, grid_capacity, cell_side;
 
 	if (!tns->dirty)
 		return;
@@ -475,25 +462,28 @@ void tns_render(tns_t *tns)
 
 	tns->cols = MAX(1, win->w / tns->dim);
 	tns->rows = MAX(1, win->h / tns->dim);
+	grid_capacity = tns->cols * tns->rows;
+	cell_side = thumb_sizes[tns->zoom_level];
 
-	if (*tns->cnt < tns->cols * tns->rows) {
+	if (*tns->cnt < grid_capacity) {
 		tns->first = 0;
 		cnt = *tns->cnt;
 	} else {
 		tns_check_view(tns, false);
-		cnt = tns->cols * tns->rows;
+		cnt = grid_capacity;
 		if ((r = tns->first + cnt - *tns->cnt) >= tns->cols)
 			tns->first -= r - r % tns->cols;
 		if (r > 0)
 			cnt -= r % tns->cols;
 	}
 	r = cnt % tns->cols ? 1 : 0;
-	tns->x = x = (win->w - MIN(cnt, tns->cols) * tns->dim) / 2 + tns->bw + 3;
-	tns->y = y = (win->h - (cnt / tns->cols + r) * tns->dim) / 2 + tns->bw + 3 +
+	tns->x = grid_x = (win->w - MIN(cnt, tns->cols) * tns->dim) / 2 + tns->border_width + 3;
+	tns->y = grid_y = (win->h - (cnt / tns->cols + r) * tns->dim) / 2 + tns->border_width + 3 +
 	             (win->bar.top ? win->bar.h : 0);
 	tns->loadnext = *tns->cnt;
 	tns->end = tns->first + cnt;
 
+	// Unload thumbs from other pages
 	for (i = tns->r_first; i < tns->r_end; i++) {
 		if ((i < tns->first || i >= tns->end) && tns->thumbs[i].im != NULL)
 			tns_unload(tns, i);
@@ -503,21 +493,38 @@ void tns_render(tns_t *tns)
 
 	for (i = tns->first; i < tns->end; i++) {
 		t = &tns->thumbs[i];
-		if (t->im != NULL) {
-			t->x = x + (thumb_sizes[tns->zl] - t->w) / 2;
-			t->y = y + (thumb_sizes[tns->zl] - t->h) / 2;
+		if (t->im == NULL) {
+			tns->loadnext = MIN(tns->loadnext, i);
+		} else {
 			imlib_context_set_image(t->im);
-			imlib_render_image_on_drawable_at_size(t->x, t->y, t->w, t->h);
+			if (SQUARE_THUMBS) {
+				int size = MIN(t->w, t->h);
+				int tn_x = (t->w < t->h) ? 0 : (t->w - t->h) / 2;
+				int tn_y = (t->w > t->h) ? 0 : (t->h - t->w) / 2;
+				t->x = grid_x;
+				t->y = grid_y;
+				imlib_render_image_part_on_drawable_at_size(
+					tn_x, tn_y, size, size,
+					t->x, t->y, cell_side, cell_side
+				);
+			} else {
+				t->scale = (t->w > t->h)
+					? ((float) cell_side / (float) t->w)
+					: ((float) cell_side / (float) t->h);
+				int scaled_w = (int) (t->scale * t->w);
+				int scaled_h = (int) (t->scale * t->h);
+				t->x = grid_x + (cell_side - scaled_w) / 2;
+				t->y = grid_y + (cell_side - scaled_h) / 2;
+				imlib_render_image_on_drawable_at_size(t->x, t->y, scaled_w, scaled_h);
+			}
 			if (tns->files[i].flags & FF_MARK)
 				tns_mark(tns, i, true);
-		} else {
-			tns->loadnext = MIN(tns->loadnext, i);
 		}
 		if ((i + 1) % tns->cols == 0) {
-			x = tns->x;
-			y += tns->dim;
+			grid_x = tns->x;
+			grid_y += tns->dim;
 		} else {
-			x += tns->dim;
+			grid_x += tns->dim;
 		}
 	}
 	tns->dirty = false;
@@ -526,39 +533,76 @@ void tns_render(tns_t *tns)
 
 void tns_mark(tns_t *tns, int n, bool mark)
 {
-	if (n >= 0 && n < *tns->cnt && tns->thumbs[n].im != NULL) {
-		win_t *win = tns->win;
-		thumb_t *t = &tns->thumbs[n];
-		unsigned long col = win->win_bg.pixel;
-		int x = t->x + t->w, y = t->y + t->h;
+	if (n < 0 || n >= *tns->cnt || tns->thumbs[n].im == NULL)
+	    return;
 
-		win_draw_rect(win, x - 1, y + 1, 1, tns->bw, true, 1, col);
-		win_draw_rect(win, x + 1, y - 1, tns->bw, 1, true, 1, col);
+	win_t *win = tns->win;
+	thumb_t *t = &tns->thumbs[n];
+	unsigned long color;
+	int cell_side = thumb_sizes[tns->zoom_level];
 
-		if (mark)
-			col = win->mrk_fg.pixel;
+	int w = cell_side / 3;
+	int h = cell_side / 3;
 
-		win_draw_rect(win, x, y, tns->bw + 2, tns->bw + 2, true, 1, col);
+	int x = t->x - w/2 + cell_side/2;
+	float scale = SQUARE_THUMBS ? 1 : t->scale;
+	int y = t->y - h/2 + (int) (scale*t->h)/2;
 
-		if (!mark && n == *tns->sel)
-			tns_highlight(tns, n, true);
+	color = win->win_bg.pixel;
+	win_draw_rect(win, x, y, w, h, true, 1, color);
+
+	if (mark) {
+		color = win->tn_mark_fg.pixel;
+		win_draw_rect(win, x + MARK_BORDER_SIZE, y + MARK_BORDER_SIZE, w - 2 * MARK_BORDER_SIZE, h - 2 * MARK_BORDER_SIZE, true, 1, color);
+	} else {
+		imlib_context_set_image(t->im);
+		if (SQUARE_THUMBS) {
+			int size = MIN(t->w, t->h);
+			int tn_x = (t->w < t->h) ? 0 : (t->w - t->h) / 2;
+			int tn_y = (t->w > t->h) ? 0 : (t->h - t->w) / 2;
+			imlib_render_image_part_on_drawable_at_size(
+				tn_x, tn_y, size, size,
+				t->x, t->y, cell_side, cell_side
+			);
+		} else {
+			int scaled_w = (int) (t->scale * t->w);
+			int scaled_h = (int) (t->scale * t->h);
+			imlib_render_image_on_drawable_at_size(t->x, t->y, scaled_w, scaled_h);
+		}
 	}
+
+	if (!mark && n == *tns->sel)
+		tns_highlight(tns, n, true);
 }
 
 void tns_highlight(tns_t *tns, int n, bool hl)
 {
-	if (n >= 0 && n < *tns->cnt && tns->thumbs[n].im != NULL) {
-		win_t *win = tns->win;
-		thumb_t *t = &tns->thumbs[n];
-		unsigned long col = hl ? win->win_fg.pixel : win->win_bg.pixel;
-		int oxy = (tns->bw + 1) / 2 + 1, owh = tns->bw + 2;
+	if (n < 0 || n >= *tns->cnt || tns->thumbs[n].im == NULL)
+	    return;
 
-		win_draw_rect(win, t->x - oxy, t->y - oxy, t->w + owh, t->h + owh,
-		              false, tns->bw, col);
+	win_t *win = tns->win;
+	thumb_t *t = &tns->thumbs[n];
+	unsigned long color = hl ? win->win_fg.pixel : win->win_bg.pixel;
+	int offset_xy = (tns->border_width + 1) / 2 + 1;
+	int offset_wh = tns->border_width + 2;
+	int cell_side = thumb_sizes[tns->zoom_level];
 
-		if (tns->files[n].flags & FF_MARK)
-			tns_mark(tns, n, true);
+	if (SQUARE_THUMBS) {
+		int w = t->w + offset_wh;
+		int h = t->h + offset_wh;
+		int size = MAX(MIN(w, h), cell_side);
+	    	win_draw_rect(win, t->x - offset_xy, t->y - offset_xy, size, size, false, tns->border_width, color);
+	} else {
+		float scale = (t->w > t->h) ? ((float) cell_side / (float) t->w) : ((float) cell_side / (float) t->h);
+		int scaled_w = (int) (scale * t->w);
+		int scaled_h = (int) (scale * t->h);
+		int w = scaled_w + offset_wh;
+		int h = scaled_h + offset_wh;
+	    	win_draw_rect(win, t->x - offset_xy, t->y - offset_xy, w, h, false, tns->border_width, color);
 	}
+
+	if (tns->files[n].flags & FF_MARK)
+		tns_mark(tns, n, true);
 }
 
 bool tns_move_selection(tns_t *tns, direction_t dir, int cnt)
@@ -619,23 +663,24 @@ bool tns_scroll(tns_t *tns, direction_t dir, bool screen)
 
 bool tns_zoom(tns_t *tns, int d)
 {
-	int i, oldzl;
+	int i, oldzl, tn_cell_size;
 
-	oldzl = tns->zl;
-	tns->zl += -(d < 0) + (d > 0);
-	tns->zl = MAX(tns->zl, 0);
-	tns->zl = MIN(tns->zl, (int)ARRLEN(thumb_sizes) - 1);
+	oldzl = tns->zoom_level;
+	tns->zoom_level += -(d < 0) + (d > 0);
+	tns->zoom_level = MAX(tns->zoom_level, 0);
+	tns->zoom_level = MIN(tns->zoom_level, (int)ARRLEN(thumb_sizes) - 1);
+	tn_cell_size = thumb_sizes[tns->zoom_level];
 
-	tns->bw = ((thumb_sizes[tns->zl] - 1) >> 5) + 1;
-	tns->bw = MIN(tns->bw, 4);
-	tns->dim = thumb_sizes[tns->zl] + 2 * tns->bw + 6;
+	tns->border_width = ((tn_cell_size - 1) >> 5) + 1;
+	tns->border_width = MIN(tns->border_width, MAX_BORDER_SIZE_HL);
+	tns->dim = tn_cell_size + GRID_GAP_SIZE;
 
-	if (tns->zl != oldzl) {
+	if (tns->zoom_level != oldzl) {
 		for (i = 0; i < *tns->cnt; i++)
 			tns_unload(tns, i);
 		tns->dirty = true;
 	}
-	return tns->zl != oldzl;
+	return tns->zoom_level != oldzl;
 }
 
 int tns_translate(tns_t *tns, int x, int y)

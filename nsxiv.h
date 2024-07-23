@@ -295,6 +295,7 @@ typedef struct {
 	int h;
 	int x;
 	int y;
+        float scale;
 } thumb_t;
 
 struct tns {
@@ -312,8 +313,8 @@ struct tns {
 	int y;
 	int cols;
 	int rows;
-	int zl;
-	int bw;
+	int zoom_level;
+	int border_width;
 	int dim;
 
 	bool dirty;
@@ -407,7 +408,7 @@ struct win {
 
 	XColor win_bg;
 	XColor win_fg;
-	XColor mrk_fg;
+	XColor tn_mark_fg;
 #if HAVE_LIBFONTS
 	XftColor bar_bg;
 	XftColor bar_fg;
@@ -443,7 +444,7 @@ void win_toggle_fullscreen(win_t*);
 void win_toggle_bar(win_t*);
 void win_clear(win_t*);
 void win_draw(win_t*);
-void win_draw_rect(win_t*, int, int, int, int, bool, int, unsigned long);
+void win_draw_rect(win_t *window, int x, int y, int w, int h, bool fill, int line_width, unsigned long color);
 void win_set_title(win_t*, const char*, size_t);
 void win_set_cursor(win_t*, cursor_t);
 void win_cursor_pos(win_t*, int*, int*);

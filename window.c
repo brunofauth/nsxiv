@@ -146,7 +146,7 @@ void win_init(win_t *win)
 	mrk_fg = win_res(db, MARK_FG[0], MARK_FG[1] ? MARK_FG[1] : win_fg);
 	win_alloc_color(e, win_bg, &win->win_bg);
 	win_alloc_color(e, win_fg, &win->win_fg);
-	win_alloc_color(e, mrk_fg, &win->mrk_fg);
+	win_alloc_color(e, mrk_fg, &win->tn_mark_fg);
 
 #if HAVE_LIBFONTS
 	bar_bg = win_res(db, BAR_BG[0], BAR_BG[1] ? BAR_BG[1] : win_bg);
@@ -500,19 +500,19 @@ void win_draw(win_t *win)
 	XFlush(win->env.dpy);
 }
 
-void win_draw_rect(win_t *win, int x, int y, int w, int h, bool fill, int lw,
-                   unsigned long col)
+void win_draw_rect(win_t *window, int x, int y, int w, int h, bool fill, int line_width,
+                   unsigned long color)
 {
 	XGCValues gcval;
 
-	gcval.line_width = lw;
-	gcval.foreground = col;
-	XChangeGC(win->env.dpy, gc, GCForeground | GCLineWidth, &gcval);
+	gcval.line_width = line_width;
+	gcval.foreground = color;
+	XChangeGC(window->env.dpy, gc, GCForeground | GCLineWidth, &gcval);
 
 	if (fill)
-		XFillRectangle(win->env.dpy, win->buf.pm, gc, x, y, w, h);
+		XFillRectangle(window->env.dpy, window->buf.pm, gc, x, y, w, h);
 	else
-		XDrawRectangle(win->env.dpy, win->buf.pm, gc, x, y, w, h);
+		XDrawRectangle(window->env.dpy, window->buf.pm, gc, x, y, w, h);
 }
 
 void win_set_title(win_t *win, const char *title, size_t len)

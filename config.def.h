@@ -9,7 +9,7 @@ static const int WIN_HEIGHT = 600;
  *                                      X resource            value (NULL == default) */
 static const char *WIN_BG[]   = { "Nsxiv.window.background",   "white" };
 static const char *WIN_FG[]   = { "Nsxiv.window.foreground",   "black" };
-static const char *MARK_FG[]  = { "Nsxiv.mark.foreground",      NULL };
+static const char *MARK_FG[]  = { "Nsxiv.mark.foreground",      NULL   };
 #if HAVE_LIBFONTS
 static const char *BAR_BG[]   = { "Nsxiv.bar.background",       NULL };
 static const char *BAR_FG[]   = { "Nsxiv.bar.foreground",       NULL };
@@ -81,7 +81,16 @@ static const int THUMB_SIZE = 3;
 
 /* whether to show thumbnails in squares or respect their aspect ratio,
  * toggleable with t_toggle_squared 's' keybinding in thumbnail mode */
-static bool SQUARE_THUMBS = true;
+static bool SQUARE_THUMBS = false;
+
+/* Maximum size for the border which highlights thumbnails */
+static int MAX_BORDER_SIZE_HL = 2;
+
+/* Size, in pixels, for the gap between thumbnails. Must be >=0 */
+static int GRID_GAP_SIZE = 2;
+
+/* Size, in pixels, for the border around thumbnail marks. Must be >=0 */
+static int MARK_BORDER_SIZE = 2;
 
 #endif
 #ifdef INCLUDE_MAPPINGS_CONFIG
