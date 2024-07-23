@@ -479,7 +479,7 @@ bool ct_select(arg_t _)
 bool ct_toggle_squared(arg_t _)
 {
 	tns_toggle_squared();
-	ct_reload_all(RF_KEEP_ZL);
+	ct_reload_all(RF_KEEP_ZOOM_LEVEL & RF_KEEP_MARK_COLOR_MOD);
 
 	return true;
 }

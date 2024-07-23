@@ -148,6 +148,38 @@ void tns_clean_cache(void)
 	r_closedir(&dir);
 }
 
+float clamp(float n, float min, float max) {
+	const float t = n < min ? min : n;
+	return t > max ? max : t;
+}
+
+void _transform_mark_color_modifier(tns_t *tns) {
+	float af[256], rf[256], gf[256], bf[256];
+	for (int i = 255; i >= 0; i--)
+		rf [i] = gf [i] = bf [i] = af [i] = (float) i / 255;
+
+	// Could have more blocks like this for filters other than tint
+	if (MCM_TINT[MCM_R] != 1.0)
+		for (int i = 255; i >= 0; i--)
+			rf[i] *= MCM_TINT[MCM_R];
+	if (MCM_TINT[MCM_G] != 1.0)
+		for (int i = 255; i >= 0; i--)
+			gf[i] *= MCM_TINT[MCM_G];
+	if (MCM_TINT[MCM_B] != 1.0)
+		for (int i = 255; i >= 0; i--)
+			bf[i] *= MCM_TINT[MCM_B];
+	if (MCM_TINT[MCM_A] != 1.0)
+		for (int i = 255; i >= 0; i--)
+			af[i] *= MCM_TINT[MCM_A];
+
+	for (int i = 255; i != 0 ; i--) {
+	    tns->mcm->r[i] = clamp(rf[i], 0, 1) * 255;
+	    tns->mcm->g[i] = clamp(gf[i], 0, 1) * 255;
+	    tns->mcm->b[i] = clamp(bf[i], 0, 1) * 255;
+	    tns->mcm->a[i] = clamp(af[i], 0, 1) * 255;
+	}
+}
+
 void tns_init(tns_t *tns, fileinfo_t *tns_files, const int *cnt, int *sel, win_t *win)
 {
 	int len;
@@ -168,22 +200,27 @@ void tns_init(tns_t *tns, fileinfo_t *tns_files, const int *cnt, int *sel, win_t
 	tns->zoom_level = THUMB_SIZE;
 	tns_zoom(tns, 0);
 
+	markcolormod_t *table = emalloc(sizeof(markcolormod_t));
+	for (int i = 255; i >= 0; i--)
+		table->a[i] = table->r[i] = table->g[i] = table->b[i] = i;
+	tns->mcm = table;
+	_transform_mark_color_modifier(tns);
+
 	if ((homedir = getenv("XDG_CACHE_HOME")) == NULL || homedir[0] == '\0') {
 		homedir = getenv("HOME");
 		dsuffix = "/.cache";
 	}
-	if (homedir != NULL) {
-		const char *s = "/nsxiv";
-		free(cache_dir);
-		len = strlen(homedir) + strlen(dsuffix) + strlen(s) + 1;
-		cache_dir = emalloc(len);
-		snprintf(cache_dir, len, "%s%s%s", homedir, dsuffix, s);
-		cache_tmpfile = emalloc(len + sizeof(TMP_NAME));
-		memcpy(cache_tmpfile, cache_dir, len - 1);
-		cache_tmpfile_base = cache_tmpfile + len - 1;
-	} else {
+	if (homedir == NULL)
 		error(EXIT_FAILURE, 0, "Cache directory not found");
-	}
+
+	const char *s = "/nsxiv";
+	free(cache_dir);
+	len = strlen(homedir) + strlen(dsuffix) + strlen(s) + 1;
+	cache_dir = emalloc(len);
+	snprintf(cache_dir, len, "%s%s%s", homedir, dsuffix, s);
+	cache_tmpfile = emalloc(len + sizeof(TMP_NAME));
+	memcpy(cache_tmpfile, cache_dir, len - 1);
+	cache_tmpfile_base = cache_tmpfile + len - 1;
 }
 
 CLEANUP void tns_free(tns_t *tns)
@@ -197,6 +234,7 @@ CLEANUP void tns_free(tns_t *tns)
 		tns->thumbs = NULL;
 	}
 
+	free(tns->mcm);
 	free(cache_dir);
 	cache_dir = NULL;
 	free(cache_tmpfile);
@@ -205,9 +243,14 @@ CLEANUP void tns_free(tns_t *tns)
 
 CLEANUP void tns_replace(tns_t *tns, fileinfo_t *tns_files, const int *cnt, int *sel, win_t *win, replaceflags_t flags)
 {
-	int zl = THUMB_SIZE;
-	if (flags & RF_KEEP_ZL)
-		zl = tns->zoom_level;
+	int zoom_level = THUMB_SIZE;
+	if (flags & RF_KEEP_ZOOM_LEVEL)
+		zoom_level = tns->zoom_level;
+	markcolormod_t *mark_mod = NULL;
+	if (flags & RF_KEEP_MARK_COLOR_MOD) {
+		mark_mod = tns->mcm;
+		tns->mcm = NULL;
+	}
 
 	tns_free(tns);
 
@@ -226,25 +269,34 @@ CLEANUP void tns_replace(tns_t *tns, fileinfo_t *tns_files, const int *cnt, int 
 	tns->win = win;
 	tns->dirty = true;
 
-	tns->zoom_level = zl;
+	tns->zoom_level = zoom_level;
 	tns_zoom(tns, 0);
+
+	if (mark_mod != NULL) {
+		tns->mcm = mark_mod;
+	} else {
+		markcolormod_t *table = emalloc(sizeof(markcolormod_t));
+		for (int i = 255; i >= 0; i--)
+			table->a[i] = table->r[i] = table->g[i] = table->b[i] = i;
+		tns->mcm = table;
+		_transform_mark_color_modifier(tns);
+	}
 
 	if ((homedir = getenv("XDG_CACHE_HOME")) == NULL || homedir[0] == '\0') {
 		homedir = getenv("HOME");
 		dsuffix = "/.cache";
 	}
-	if (homedir != NULL) {
-		const char *s = "/nsxiv";
-		free(cache_dir);
-		len = strlen(homedir) + strlen(dsuffix) + strlen(s) + 1;
-		cache_dir = emalloc(len);
-		snprintf(cache_dir, len, "%s%s%s", homedir, dsuffix, s);
-		cache_tmpfile = emalloc(len + sizeof(TMP_NAME));
-		memcpy(cache_tmpfile, cache_dir, len - 1);
-		cache_tmpfile_base = cache_tmpfile + len - 1;
-	} else {
+	if (homedir != NULL) 
 		error(EXIT_FAILURE, 0, "Cache directory not found");
-	}
+
+	const char *s = "/nsxiv";
+	free(cache_dir);
+	len = strlen(homedir) + strlen(dsuffix) + strlen(s) + 1;
+	cache_dir = emalloc(len);
+	snprintf(cache_dir, len, "%s%s%s", homedir, dsuffix, s);
+	cache_tmpfile = emalloc(len + sizeof(TMP_NAME));
+	memcpy(cache_tmpfile, cache_dir, len - 1);
+	cache_tmpfile_base = cache_tmpfile + len - 1;
 }
 
 static Imlib_Image tns_scale_down(Imlib_Image im, int max_side_size)
@@ -497,7 +549,7 @@ void tns_render(tns_t *tns)
 			tns->loadnext = MIN(tns->loadnext, i);
 		} else {
 			imlib_context_set_image(t->im);
-			if (SQUARE_THUMBS) {
+			if (square_thumbs) {
 				int size = MIN(t->w, t->h);
 				int tn_x = (t->w < t->h) ? 0 : (t->w - t->h) / 2;
 				int tn_y = (t->w > t->h) ? 0 : (t->h - t->w) / 2;
@@ -531,6 +583,24 @@ void tns_render(tns_t *tns)
 	tns_highlight(tns, *tns->sel, true);
 }
 
+// Imlib has actual filters, but I couldn't figure out how they work, so I just
+// reimplemented that functionality (probably in a worse way)
+Imlib_Image apply_filters(Imlib_Image src, markcolormod_t *table) {
+	imlib_context_set_image(src);
+	Imlib_Image clone;
+	if (!(clone = imlib_clone_image()))
+		error(EXIT_FAILURE, 0, "Couldn't apply filters to image");
+	imlib_context_set_image(clone);
+	Imlib_Color_Modifier color_modifier;
+	if (!(color_modifier = imlib_create_color_modifier()))
+		error(EXIT_FAILURE, 0, "Couldn't apply filters to image");
+	imlib_context_set_color_modifier(color_modifier);
+	imlib_set_color_modifier_tables(table->r, table->g, table->b, table->a);
+	imlib_apply_color_modifier();
+	imlib_free_color_modifier();
+	return clone;
+}
+
 void tns_mark(tns_t *tns, int n, bool mark)
 {
 	if (n < 0 || n >= *tns->cnt || tns->thumbs[n].im == NULL)
@@ -540,36 +610,46 @@ void tns_mark(tns_t *tns, int n, bool mark)
 	thumb_t *t = &tns->thumbs[n];
 	unsigned long color;
 	int cell_side = thumb_sizes[tns->zoom_level];
+	Imlib_Image filtered = NULL;
 
 	int w = cell_side / 3;
 	int h = cell_side / 3;
 
 	int x = t->x - w/2 + cell_side/2;
-	float scale = SQUARE_THUMBS ? 1 : t->scale;
+	float scale = square_thumbs ? 1 : t->scale;
 	int y = t->y - h/2 + (int) (scale*t->h)/2;
 
-	color = win->win_bg.pixel;
-	win_draw_rect(win, x, y, w, h, true, 1, color);
-
 	if (mark) {
-		color = win->tn_mark_fg.pixel;
-		win_draw_rect(win, x + MARK_BORDER_SIZE, y + MARK_BORDER_SIZE, w - 2 * MARK_BORDER_SIZE, h - 2 * MARK_BORDER_SIZE, true, 1, color);
+		filtered = apply_filters(t->im, tns->mcm);
+		imlib_context_set_image(filtered);
 	} else {
 		imlib_context_set_image(t->im);
-		if (SQUARE_THUMBS) {
-			int size = MIN(t->w, t->h);
-			int tn_x = (t->w < t->h) ? 0 : (t->w - t->h) / 2;
-			int tn_y = (t->w > t->h) ? 0 : (t->h - t->w) / 2;
-			imlib_render_image_part_on_drawable_at_size(
-				tn_x, tn_y, size, size,
-				t->x, t->y, cell_side, cell_side
-			);
-		} else {
-			int scaled_w = (int) (t->scale * t->w);
-			int scaled_h = (int) (t->scale * t->h);
-			imlib_render_image_on_drawable_at_size(t->x, t->y, scaled_w, scaled_h);
-		}
 	}
+
+	if (square_thumbs) {
+		int size = MIN(t->w, t->h);
+		int tn_x = (t->w < t->h) ? 0 : (t->w - t->h) / 2;
+		int tn_y = (t->w > t->h) ? 0 : (t->h - t->w) / 2;
+		imlib_render_image_part_on_drawable_at_size(
+			tn_x, tn_y, size, size,
+			t->x, t->y, cell_side, cell_side
+		);
+	} else {
+		int scaled_w = (int) (t->scale * t->w);
+		int scaled_h = (int) (t->scale * t->h);
+		imlib_render_image_on_drawable_at_size(t->x, t->y, scaled_w, scaled_h);
+	}
+
+	if (mark) {
+		color = win->win_bg.pixel;
+		win_draw_rect(win, x, y, w, h, true, 1, color);
+		color = win->tn_mark_fg.pixel;
+		win_draw_rect(win, x + MARK_BORDER_SIZE, y + MARK_BORDER_SIZE, w - 2 * MARK_BORDER_SIZE, h - 2 * MARK_BORDER_SIZE, true, 1, color);
+	}
+
+	if (filtered != NULL)
+		free(filtered);
+
 
 	//// The lines below aren't needed for now, as markers no longer are drawn over highlighting frames
 	//// Maybe I'll need them in the future? We'll see...
@@ -589,7 +669,7 @@ void tns_highlight(tns_t *tns, int n, bool hl)
 	int offset_wh = tns->border_width + 2;
 	int cell_side = thumb_sizes[tns->zoom_level];
 
-	if (SQUARE_THUMBS) {
+	if (square_thumbs) {
 		int w = t->w + offset_wh;
 		int h = t->h + offset_wh;
 		int size = MAX(MIN(w, h), cell_side);
@@ -702,6 +782,6 @@ int tns_translate(tns_t *tns, int x, int y)
 
 bool tns_toggle_squared(void)
 {
-	SQUARE_THUMBS = !SQUARE_THUMBS;
+	square_thumbs = !square_thumbs;
 	return true;
 }

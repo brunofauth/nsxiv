@@ -100,8 +100,16 @@ typedef enum {
 } fileflags_t;
 
 typedef enum {
-	RF_KEEP_ZL = 1,
+	RF_KEEP_ZOOM_LEVEL = 1,
+	RF_KEEP_MARK_COLOR_MOD = 2,
 } replaceflags_t;
+
+enum {
+	MCM_R = 0,
+	MCM_G = 1,
+	MCM_B = 2,
+	MCM_A = 3,
+};
 
 typedef struct {
 	const char *name; /* as given by user */
@@ -298,6 +306,13 @@ typedef struct {
         float scale;
 } thumb_t;
 
+typedef struct {
+	uint8_t r[256];
+	uint8_t g[256];
+	uint8_t b[256];
+	uint8_t a[256];
+} markcolormod_t;
+
 struct tns {
 	fileinfo_t *files;
 	thumb_t *thumbs;
@@ -316,6 +331,7 @@ struct tns {
 	int zoom_level;
 	int border_width;
 	int dim;
+	markcolormod_t *mcm;
 
 	bool dirty;
 };

@@ -16,8 +16,9 @@ upstream README.md
   disk space for prettiness, that's the selling point!
 
 * Highlight markers are now big, loud, obnoxious and occupy a significant part 
-  of each image, so that you never overlook them!
-    - TODO: tint images blue when selected
+  of each image, so that you never overlook them! Furthermore, the whole image 
+  gets tinted red (thats adjustable) behind said marker. There's really no way 
+  to miss it.
 
 ----------------------
 

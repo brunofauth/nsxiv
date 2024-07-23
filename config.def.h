@@ -81,16 +81,19 @@ static const int THUMB_SIZE = 3;
 
 /* whether to show thumbnails in squares or respect their aspect ratio,
  * toggleable with t_toggle_squared 's' keybinding in thumbnail mode */
-static bool SQUARE_THUMBS = true;
+static bool square_thumbs = true;
 
 /* Maximum size for the border which highlights thumbnails */
-static int MAX_BORDER_SIZE_HL = 2;
+static const int MAX_BORDER_SIZE_HL = 2;
 
 /* Size, in pixels, for the gap between thumbnails. Must be >=0 */
-static int GRID_GAP_SIZE = 2;
+static const int GRID_GAP_SIZE = 2;
 
 /* Size, in pixels, for the border around thumbnail marks. Must be >=0 */
-static int MARK_BORDER_SIZE = 2;
+static const int MARK_BORDER_SIZE = 2;
+
+/* Tint values for the color modifier of thumbnail markers; R-G-B-A */
+static const float MCM_TINT[] = {1.0, 0.5, 0.5, 1.0};
 
 #endif
 #ifdef INCLUDE_MAPPINGS_CONFIG
