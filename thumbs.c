@@ -286,7 +286,7 @@ CLEANUP void tns_replace(tns_t *tns, fileinfo_t *tns_files, const int *cnt, int 
 		homedir = getenv("HOME");
 		dsuffix = "/.cache";
 	}
-	if (homedir != NULL) 
+	if (homedir == NULL) 
 		error(EXIT_FAILURE, 0, "Cache directory not found");
 
 	const char *s = "/nsxiv";
