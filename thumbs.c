@@ -571,8 +571,10 @@ void tns_mark(tns_t *tns, int n, bool mark)
 		}
 	}
 
-	if (!mark && n == *tns->sel)
-		tns_highlight(tns, n, true);
+	//// The lines below aren't needed for now, as markers no longer are drawn over highlighting frames
+	//// Maybe I'll need them in the future? We'll see...
+	// if (!mark && n == *tns->sel)
+	// 	tns_highlight(tns, n, true);
 }
 
 void tns_highlight(tns_t *tns, int n, bool hl)

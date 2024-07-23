@@ -81,7 +81,7 @@ static const int THUMB_SIZE = 3;
 
 /* whether to show thumbnails in squares or respect their aspect ratio,
  * toggleable with t_toggle_squared 's' keybinding in thumbnail mode */
-static bool SQUARE_THUMBS = false;
+static bool SQUARE_THUMBS = true;
 
 /* Maximum size for the border which highlights thumbnails */
 static int MAX_BORDER_SIZE_HL = 2;

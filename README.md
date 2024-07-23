@@ -1,3 +1,23 @@
+About this Repository
+---------------------
+
+This is a fork of NSXIV, with a few features I deemed essential. Here's a 
+summary of the changes I've implemented and, below that, the rest of the 
+upstream README.md
+
+* Added a toggle-able square thumbnail mode, which changes the program to 
+  render pictures as either a cropped square image or a scaled down 
+  "usual-aspect ratio" image. This behavior that found on [this popular 
+  patch](), because, in that patch, when you try to display squared thumbnails, 
+  you get **upscaled** cropped versions of the "usual-aspect ratio" images (and 
+  those can get very grainy and ugly).
+
+* Highlight markers are now big, loud, obnoxious and occupy a significant part 
+  of each image, so that you never overlook them!
+    - TODO: tint images blue when selected
+
+----------------------
+
 [![nsxiv](https://codeberg.org/nsxiv/pages/raw/branch/master/img/logo.png)](https://codeberg.org/nsxiv/nsxiv)
 
 [![Codeberg](https://img.shields.io/badge/Hosted_at-Codeberg-%232185D0?style=flat-square&logo=CodeBerg)](https://codeberg.org/nsxiv/nsxiv)
