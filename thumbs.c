@@ -192,7 +192,7 @@ void tns_init(tns_t *tns, fileinfo_t *tns_files, const int *cnt, int *sel, win_t
 	tns->files = tns_files;
 	tns->cnt = cnt;
 	tns->initnext = tns->loadnext = 0;
-	tns->first = tns->end = tns->r_first = tns->r_end = 0;
+	tns->curr_view_first = tns->curr_view_end = tns->prev_view_first = tns->prev_view_end = 0;
 	tns->sel = sel;
 	tns->win = win;
 	tns->dirty = false;
@@ -264,7 +264,7 @@ CLEANUP void tns_replace(tns_t *tns, fileinfo_t *tns_files, const int *cnt, int 
 	tns->files = tns_files;
 	tns->cnt = cnt;
 	tns->initnext = tns->loadnext = 0;
-	tns->first = tns->end = tns->r_first = tns->r_end = 0;
+	tns->curr_view_first = tns->curr_view_end = tns->prev_view_first = tns->prev_view_end = 0;
 	tns->sel = sel;
 	tns->win = win;
 	tns->dirty = true;
@@ -327,6 +327,8 @@ static Imlib_Image tns_scale_down(Imlib_Image im, int max_side_size)
 	return im;
 }
 
+// Besides loading thumbnails, this function also advances `initnext` and `loadnext`
+// Returns true if thumbnail was successfully loaded
 bool tns_load(tns_t *tns, int n, bool force, bool cache_only)
 {
 	int maxwh = thumb_sizes[ARRLEN(thumb_sizes) - 1];
@@ -455,7 +457,7 @@ bool tns_load(tns_t *tns, int n, bool force, bool cache_only)
 			;
 	}
 	if (n == tns->loadnext && !cache_only) {
-		while (++tns->loadnext < tns->end && (++t)->im != NULL)
+		while (++tns->loadnext < tns->curr_view_end && (++t)->im != NULL)
 			;
 	}
 
@@ -478,22 +480,22 @@ static void tns_check_view(tns_t *tns, bool scrolled)
 	int r;
 
 	assert(tns != NULL);
-	tns->first -= tns->first % tns->cols;
+	tns->curr_view_first -= tns->curr_view_first % tns->cols;
 	r = *tns->sel % tns->cols;
 
 	if (scrolled) {
 		/* move selection into visible area */
-		if (*tns->sel >= tns->first + tns->cols * tns->rows)
-			*tns->sel = tns->first + r + tns->cols * (tns->rows - 1);
-		else if (*tns->sel < tns->first)
-			*tns->sel = tns->first + r;
+		if (*tns->sel >= tns->curr_view_first + tns->cols * tns->rows)
+			*tns->sel = tns->curr_view_first + r + tns->cols * (tns->rows - 1);
+		else if (*tns->sel < tns->curr_view_first)
+			*tns->sel = tns->curr_view_first + r;
 	} else {
 		/* scroll to selection */
-		if (tns->first + tns->cols * tns->rows <= *tns->sel) {
-			tns->first = *tns->sel - r - tns->cols * (tns->rows - 1);
+		if (tns->curr_view_first + tns->cols * tns->rows <= *tns->sel) {
+			tns->curr_view_first = *tns->sel - r - tns->cols * (tns->rows - 1);
 			tns->dirty = true;
-		} else if (tns->first > *tns->sel) {
-			tns->first = *tns->sel - r;
+		} else if (tns->curr_view_first > *tns->sel) {
+			tns->curr_view_first = *tns->sel - r;
 			tns->dirty = true;
 		}
 	}
@@ -518,13 +520,13 @@ void tns_render(tns_t *tns)
 	cell_side = thumb_sizes[tns->zoom_level];
 
 	if (*tns->cnt < grid_capacity) {
-		tns->first = 0;
+		tns->curr_view_first = 0;
 		cnt = *tns->cnt;
 	} else {
 		tns_check_view(tns, false);
 		cnt = grid_capacity;
-		if ((r = tns->first + cnt - *tns->cnt) >= tns->cols)
-			tns->first -= r - r % tns->cols;
+		if ((r = tns->curr_view_first + cnt - *tns->cnt) >= tns->cols)
+			tns->curr_view_first -= r - r % tns->cols;
 		if (r > 0)
 			cnt -= r % tns->cols;
 	}
@@ -533,18 +535,20 @@ void tns_render(tns_t *tns)
 	tns->y = grid_y = (win->h - (cnt / tns->cols + r) * tns->dim) / 2 + tns->border_width + 3 +
 	             (win->bar.top ? win->bar.h : 0);
 	tns->loadnext = *tns->cnt;
-	tns->end = tns->first + cnt;
+	tns->curr_view_end = tns->curr_view_first + cnt;
 
-	// Unload thumbs from other pages
-	for (i = tns->r_first; i < tns->r_end; i++) {
-		if ((i < tns->first || i >= tns->end) && tns->thumbs[i].im != NULL)
+	// Unload thumbs from other views/pages
+	for (i = tns->prev_view_first; i < tns->prev_view_end; i++) {
+                // Check if said thumb is outside of the current view
+		if ((i < tns->curr_view_first || i >= tns->curr_view_end) && tns->thumbs[i].im != NULL)
 			tns_unload(tns, i);
 	}
-	tns->r_first = tns->first;
-	tns->r_end = tns->end;
+	tns->prev_view_first = tns->curr_view_first;
+	tns->prev_view_end = tns->curr_view_end;
 
-	for (i = tns->first; i < tns->end; i++) {
+	for (i = tns->curr_view_first; i < tns->curr_view_end; i++) {
 		t = &tns->thumbs[i];
+		// TODO: figure out at which times t->im can be NULL here
 		if (t->im == NULL) {
 			tns->loadnext = MIN(tns->loadnext, i);
 		} else {
@@ -612,12 +616,9 @@ void tns_mark(tns_t *tns, int n, bool mark)
 	int cell_side = thumb_sizes[tns->zoom_level];
 	Imlib_Image filtered = NULL;
 
-	int w = cell_side / 3;
-	int h = cell_side / 3;
-
-	int x = t->x - w/2 + cell_side/2;
-	float scale = square_thumbs ? 1 : t->scale;
-	int y = t->y - h/2 + (int) (scale*t->h)/2;
+	int mark_w = cell_side / 3;
+	int mark_h = cell_side / 3;
+	int mark_x, mark_y;
 
 	if (mark) {
 		filtered = apply_filters(t->im, tns->mcm);
@@ -627,6 +628,8 @@ void tns_mark(tns_t *tns, int n, bool mark)
 	}
 
 	if (square_thumbs) {
+		mark_x = t->x - mark_w/2 + cell_side/2;
+		mark_y = t->y - mark_h/2 + cell_side/2;
 		int size = MIN(t->w, t->h);
 		int tn_x = (t->w < t->h) ? 0 : (t->w - t->h) / 2;
 		int tn_y = (t->w > t->h) ? 0 : (t->h - t->w) / 2;
@@ -637,22 +640,23 @@ void tns_mark(tns_t *tns, int n, bool mark)
 	} else {
 		int scaled_w = (int) (t->scale * t->w);
 		int scaled_h = (int) (t->scale * t->h);
+		mark_x = t->x - mark_w/2 + scaled_w/2;
+		mark_y = t->y - mark_h/2 + scaled_h/2;
 		imlib_render_image_on_drawable_at_size(t->x, t->y, scaled_w, scaled_h);
 	}
 
 	if (mark) {
 		color = win->win_bg.pixel;
-		win_draw_rect(win, x, y, w, h, true, 1, color);
+		win_draw_rect(win, mark_x, mark_y, mark_w, mark_h, true, 1, color);
 		color = win->tn_mark_fg.pixel;
-		win_draw_rect(win, x + MARK_BORDER_SIZE, y + MARK_BORDER_SIZE, w - 2 * MARK_BORDER_SIZE, h - 2 * MARK_BORDER_SIZE, true, 1, color);
+		win_draw_rect(win, mark_x + MARK_BORDER_SIZE, mark_y + MARK_BORDER_SIZE, mark_w - 2 * MARK_BORDER_SIZE, mark_h - 2 * MARK_BORDER_SIZE, true, 1, color);
 	}
 
 	if (filtered != NULL)
 		free(filtered);
 
-
-	//// The lines below aren't needed for now, as markers no longer are drawn over highlighting frames
-	//// Maybe I'll need them in the future? We'll see...
+	//// The lines below aren't needed for now, as markers no longer are drawn over
+	//// highlighting frames. Maybe I'll need them in the future? We'll see...
 	// if (!mark && n == *tns->sel)
 	// 	tns_highlight(tns, n, true);
 }
@@ -683,8 +687,12 @@ void tns_highlight(tns_t *tns, int n, bool hl)
 	    	win_draw_rect(win, t->x - offset_xy, t->y - offset_xy, w, h, false, tns->border_width, color);
 	}
 
-	if (tns->files[n].flags & FF_MARK)
-		tns_mark(tns, n, true);
+	// // TODO: are these two lines still needed given the new marking system?
+	// // I guess they were put there because, I think, the highlighting frames
+	// // would be rendered over said marks, but we don't do that anymore.
+	// if (tns->files[n].flags & FF_MARK)
+	// 	tns_mark(tns, n, true);
+
 }
 
 bool tns_move_selection(tns_t *tns, direction_t dir, int cnt)
@@ -724,23 +732,23 @@ bool tns_scroll(tns_t *tns, direction_t dir, bool screen)
 {
 	int d, max, old;
 
-	old = tns->first;
+	old = tns->curr_view_first;
 	d = tns->cols * (screen ? tns->rows : 1);
 
 	if (dir == DIR_DOWN) {
 		max = *tns->cnt - tns->cols * tns->rows;
 		if (*tns->cnt % tns->cols != 0)
 			max += tns->cols - *tns->cnt % tns->cols;
-		tns->first = MIN(tns->first + d, max);
+		tns->curr_view_first = MIN(tns->curr_view_first + d, max);
 	} else if (dir == DIR_UP) {
-		tns->first = MAX(tns->first - d, 0);
+		tns->curr_view_first = MAX(tns->curr_view_first - d, 0);
 	}
 
-	if (tns->first != old) {
+	if (tns->curr_view_first != old) {
 		tns_check_view(tns, true);
 		tns->dirty = true;
 	}
-	return tns->first != old;
+	return tns->curr_view_first != old;
 }
 
 bool tns_zoom(tns_t *tns, int d)
@@ -772,7 +780,7 @@ int tns_translate(tns_t *tns, int x, int y)
 	if (x < tns->x || y < tns->y)
 		return -1;
 
-	n = tns->first + (y - tns->y) / tns->dim * tns->cols +
+	n = tns->curr_view_first + (y - tns->y) / tns->dim * tns->cols +
 	    (x - tns->x) / tns->dim;
 	if (n >= *tns->cnt)
 		n = -1;

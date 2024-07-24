@@ -320,8 +320,8 @@ struct tns {
 	int *sel;
 	int initnext;
 	int loadnext;
-	int first, end;
-	int r_first, r_end;
+	int curr_view_first, curr_view_end;
+	int prev_view_first, prev_view_end;
 
 	win_t *win;
 	int x;

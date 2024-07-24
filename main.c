@@ -475,7 +475,7 @@ static void update_info(void)
 	l->p = l->buf;
 	r->p = r->buf;
 	if (mode == MODE_THUMB) {
-		if (tns.loadnext < tns.end)
+		if (tns.loadnext < tns.curr_view_end)
 			bar_put(r, "Loading... %0*d | ", fw, tns.loadnext + 1);
 		else if (tns.initnext < filecnt)
 			bar_put(r, "Caching... %0*d | ", fw, tns.initnext + 1);
@@ -567,7 +567,7 @@ void reset_cursor(void)
 			}
 		}
 	} else {
-		if (tns.loadnext < tns.end || tns.initnext < filecnt)
+		if (tns.loadnext < tns.curr_view_end || tns.initnext < filecnt)
 			cursor = CURSOR_WATCH;
 		else
 			cursor = CURSOR_ARROW;
@@ -780,7 +780,7 @@ static void run(void)
 	while (true) {
 		to_set = check_timeouts(&timeout);
 		init_thumb = mode == MODE_THUMB && tns.initnext < filecnt;
-		load_thumb = mode == MODE_THUMB && tns.loadnext < tns.end;
+		load_thumb = mode == MODE_THUMB && tns.loadnext < tns.curr_view_end;
 
 		if ((init_thumb || load_thumb || to_set || info.fd != -1 || arl.fd != -1) &&
 		    XPending(win.env.dpy) == 0)
@@ -791,7 +791,7 @@ static void run(void)
 					remove_file(tns.loadnext, false);
 					tns.dirty = true;
 				}
-				if (tns.loadnext >= tns.end) {
+				if (tns.loadnext >= tns.curr_view_end) {
 					open_info();
 					redraw();
 				}
