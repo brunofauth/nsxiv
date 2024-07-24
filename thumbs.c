@@ -191,7 +191,7 @@ void tns_init(tns_t *tns, fileinfo_t *tns_files, const int *cnt, int *sel, win_t
 		tns->thumbs = NULL;
 	tns->files = tns_files;
 	tns->cnt = cnt;
-	tns->initnext = tns->loadnext = 0;
+	tns->next_to_init = tns->next_to_load_in_view = 0;
 	tns->curr_view_first = tns->curr_view_end = tns->prev_view_first = tns->prev_view_end = 0;
 	tns->sel = sel;
 	tns->win = win;
@@ -263,7 +263,7 @@ CLEANUP void tns_replace(tns_t *tns, fileinfo_t *tns_files, const int *cnt, int 
 		tns->thumbs = NULL;
 	tns->files = tns_files;
 	tns->cnt = cnt;
-	tns->initnext = tns->loadnext = 0;
+	tns->next_to_init = tns->next_to_load_in_view = 0;
 	tns->curr_view_first = tns->curr_view_end = tns->prev_view_first = tns->prev_view_end = 0;
 	tns->sel = sel;
 	tns->win = win;
@@ -327,7 +327,7 @@ static Imlib_Image tns_scale_down(Imlib_Image im, int max_side_size)
 	return im;
 }
 
-// Besides loading thumbnails, this function also advances `initnext` and `loadnext`
+// Besides loading thumbnails, this function also advances `next_to_init` and `next_to_load_in_view`
 // Returns true if thumbnail was successfully loaded
 bool tns_load(tns_t *tns, int n, bool force, bool cache_only)
 {
@@ -452,12 +452,12 @@ bool tns_load(tns_t *tns, int n, bool force, bool cache_only)
 	}
 	file->flags |= FF_TN_INIT;
 
-	if (n == tns->initnext) {
-		while (++tns->initnext < *tns->cnt && ((++file)->flags & FF_TN_INIT))
+	if (n == tns->next_to_init) {
+		while (++tns->next_to_init < *tns->cnt && ((++file)->flags & FF_TN_INIT))
 			;
 	}
-	if (n == tns->loadnext && !cache_only) {
-		while (++tns->loadnext < tns->curr_view_end && (++t)->im != NULL)
+	if (n == tns->next_to_load_in_view && !cache_only) {
+		while (++tns->next_to_load_in_view < tns->curr_view_end && (++t)->im != NULL)
 			;
 	}
 
@@ -534,7 +534,7 @@ void tns_render(tns_t *tns)
 	tns->x = grid_x = (win->w - MIN(cnt, tns->cols) * tns->dim) / 2 + tns->border_width + 3;
 	tns->y = grid_y = (win->h - (cnt / tns->cols + r) * tns->dim) / 2 + tns->border_width + 3 +
 	             (win->bar.top ? win->bar.h : 0);
-	tns->loadnext = *tns->cnt;
+	tns->next_to_load_in_view = *tns->cnt;
 	tns->curr_view_end = tns->curr_view_first + cnt;
 
 	// Unload thumbs from other views/pages
@@ -550,7 +550,7 @@ void tns_render(tns_t *tns)
 		t = &tns->thumbs[i];
 		// TODO: figure out at which times t->im can be NULL here
 		if (t->im == NULL) {
-			tns->loadnext = MIN(tns->loadnext, i);
+			tns->next_to_load_in_view = MIN(tns->next_to_load_in_view, i);
 		} else {
 			imlib_context_set_image(t->im);
 			if (square_thumbs) {
