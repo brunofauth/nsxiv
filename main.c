@@ -255,6 +255,7 @@ static bool check_timeouts(int *t)
 
 	for (i = 0; i < (int)ARRLEN(timeouts); ++i) {
 		if (timeouts[i].active) {
+			// TODO: does this syscall **need** to be inside a loop?
 			gettimeofday(&now, 0);
 			tdiff = TV_DIFF(&timeouts[i].when, &now);
 			if (tdiff <= 0) {
@@ -266,6 +267,9 @@ static bool check_timeouts(int *t)
 	}
 
 	tmin = INT_MAX;
+	// TODO: would it be innaproppriate to just call this at the top of the
+	// function (so that we may call it only a single time... [thinking
+	// about the loop above])
 	gettimeofday(&now, 0);
 	for (i = 0; i < (int)ARRLEN(timeouts); ++i) {
 		if (timeouts[i].active) {
@@ -475,10 +479,10 @@ static void update_info(void)
 	l->p = l->buf;
 	r->p = r->buf;
 	if (mode == MODE_THUMB) {
-		if (tns.loadnext < tns.curr_view_end)
-			bar_put(r, "Loading... %0*d | ", fw, tns.loadnext + 1);
-		else if (tns.initnext < filecnt)
-			bar_put(r, "Caching... %0*d | ", fw, tns.initnext + 1);
+		if (tns.next_to_load_in_view < tns.curr_view_end)
+			bar_put(r, "Loading... %0*d | ", fw, tns.next_to_load_in_view + 1);
+		else if (tns.next_to_init < filecnt)
+			bar_put(r, "Caching... %0*d | ", fw, tns.next_to_init + 1);
 		bar_put(r, "%s%0*d/%d", mark, fw, fileidx + 1, filecnt);
 		if (info.ft.err)
 			strncpy(l->buf, files[fileidx].name, l->size);
@@ -567,7 +571,7 @@ void reset_cursor(void)
 			}
 		}
 	} else {
-		if (tns.loadnext < tns.curr_view_end || tns.initnext < filecnt)
+		if (tns.next_to_load_in_view < tns.curr_view_end || tns.next_to_init < filecnt)
 			cursor = CURSOR_WATCH;
 		else
 			cursor = CURSOR_ARROW;
@@ -674,7 +678,7 @@ static bool run_key_handler(const char *key, unsigned int mask)
 			{
 				if (tns.thumbs != NULL) {
 					tns_unload(&tns, i);
-					tns.loadnext = MIN(tns.loadnext, i);
+					tns.next_to_load_in_view = MIN(tns.next_to_load_in_view, i);
 				}
 				changed = true;
 			}
@@ -779,26 +783,26 @@ static void run(void)
 	xbutton_ev = &ev.xbutton;
 	while (true) {
 		to_set = check_timeouts(&timeout);
-		init_thumb = mode == MODE_THUMB && tns.initnext < filecnt;
-		load_thumb = mode == MODE_THUMB && tns.loadnext < tns.curr_view_end;
+		init_thumb = mode == MODE_THUMB && tns.next_to_init < filecnt;
+		load_thumb = mode == MODE_THUMB && tns.next_to_load_in_view < tns.curr_view_end;
 
 		if ((init_thumb || load_thumb || to_set || info.fd != -1 || arl.fd != -1) &&
 		    XPending(win.env.dpy) == 0)
 		{
 			if (load_thumb) {
 				set_timeout(redraw, TO_REDRAW_THUMBS, false);
-				if (!tns_load(&tns, tns.loadnext, false, false)) {
-					remove_file(tns.loadnext, false);
+				if (!tns_load(&tns, tns.next_to_load_in_view, false, false)) {
+					remove_file(tns.next_to_load_in_view, false);
 					tns.dirty = true;
 				}
-				if (tns.loadnext >= tns.curr_view_end) {
+				if (tns.next_to_load_in_view >= tns.curr_view_end) {
 					open_info();
 					redraw();
 				}
 			} else if (init_thumb) {
 				set_timeout(redraw, TO_REDRAW_THUMBS, false);
-				if (!tns_load(&tns, tns.initnext, false, true))
-					remove_file(tns.initnext, false);
+				if (!tns_load(&tns, tns.next_to_init, false, true))
+					remove_file(tns.next_to_init, false);
 			} else {
 				pfd[FD_X].fd = ConnectionNumber(win.env.dpy);
 				pfd[FD_INFO].fd = info.fd;

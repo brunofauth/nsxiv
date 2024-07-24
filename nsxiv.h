@@ -318,8 +318,8 @@ struct tns {
 	thumb_t *thumbs;
 	const int *cnt;
 	int *sel;
-	int initnext;
-	int loadnext;
+	int next_to_init;
+	int next_to_load_in_view;
 	int curr_view_first, curr_view_end;
 	int prev_view_first, prev_view_end;
 
