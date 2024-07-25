@@ -18,32 +18,43 @@ nsxiv_ldlibs = -lImlib2 -lX11 \
   $(lib_exif_$(HAVE_LIBEXIF)) $(lib_fonts_$(HAVE_LIBFONTS)) \
   $(LDLIBS)
 
-objs = autoreload.o commands.o image.o main.o options.o \
-  thumbs.o util.o window.o
-
-.SUFFIXES:
-.SUFFIXES: .c .o
+include_dir := ./include
+build_dir := ./build
+src_dir := ./src
+sources := $(shell find $(src_dir) -iname '*.c' -printf '%p\n')
+objects = $(patsubst $(src_dir)/%.c,$(build_dir)/%.o,$(sources))
 
 all: nsxiv
 
-nsxiv: $(objs)
-	@echo "LINK $@"
-	$(CC) $(LDFLAGS) -o $@ $(objs) $(nsxiv_ldlibs)
+nsxiv: $(objects)
+	@echo "===> LD $@"
+	@echo $(objects)
+	$(CC) $(LDFLAGS) -o $@ $(objects) $(nsxiv_ldlibs)
 
-.c.o:
-	@echo "CC $@"
-	$(CC) $(CFLAGS) $(nsxiv_cppflags) -c -o $@ $<
+$(build_dir):
+	@mkdir -p $(build_dir)
 
-$(objs): Makefile config.mk nsxiv.h config.h commands.h
-options.o: version.h optparse.h
-window.o: icon/data.h utf8.h
+$(build_dir)/%.o: $(src_dir)/%.c | $(build_dir)
+	@echo "===> CC $@"
+	$(CC) $(CFLAGS) $(nsxiv_cppflags) -c $< -o $@
 
-config.h: config.def.h
-	@echo "GEN $@"
+$(objects): Makefile config.mk $(include_dir)/nsxiv.h $(include_dir)/config.h $(include_dir)/commands.h
+
+$(build_dir)/options.o: $(include_dir)/version.h $(include_dir)/optparse.h
+$(build_dir)/window.o: $(include_dir)/icon_data.h $(include_dir)/utf8.h
+$(include_dir)/icon_data.h: $(include_dir)/icon_data.gen.h
+
+$(include_dir)/icon_data.gen.h:
+	@echo "===> GEN $@"
+	make -C ./icon
+	mv ./icon/data.gen.h $@
+
+$(include_dir)/config.h: config.def.h
+	@echo "===> GEN $@"
 	cp config.def.h $@
 
-version.h: config.mk .git/index
-	@echo "GEN $@"
+$(include_dir)/version.h: config.mk .git/index
+	@echo "===> GEN $@"
 	v="$$(git describe 2>/dev/null || true)"; \
 	echo "#define VERSION \"$${v:-$(VERSION)}\"" >$@
 
@@ -53,7 +64,9 @@ dump_cppflags:
 	@echo $(nsxiv_cppflags)
 
 clean:
-	rm -f *.o nsxiv version.h
+	@rm -rf $(build_dir) $(include_dir)/version.h $(include_dir)/icon_data.gen.h
+	@rm ./nsxiv
+	@echo "Cleaned!"
 
 install-all: install install-desktop install-icon
 
@@ -81,7 +94,7 @@ uninstall-icon:
 install: all
 	@echo "INSTALL bin/nsxiv"
 	mkdir -p $(DESTDIR)$(PREFIX)/bin
-	cp nsxiv $(DESTDIR)$(PREFIX)/bin/
+	cp $(build_dir)/nsxiv $(DESTDIR)$(PREFIX)/bin/
 	chmod 755 $(DESTDIR)$(PREFIX)/bin/nsxiv
 	@echo "INSTALL nsxiv.1"
 	mkdir -p $(DESTDIR)$(MANPREFIX)/man1
@@ -102,4 +115,11 @@ uninstall: uninstall-icon
 	rm -f $(DESTDIR)$(PREFIX)/share/applications/nsxiv.desktop
 	@echo "REMOVE share/nsxiv/"
 	rm -rf $(DESTDIR)$(EGPREFIX)
+
+.PHONY: dev
+
+dev: compile_commands.json
+
+compile_commands.json: $(sources)
+	bear -- make
 

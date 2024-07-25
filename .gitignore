@@ -5,3 +5,6 @@ version.h
 nsxiv
 icon/img2data
 tags
+/.cache
+/compile_commands.json
+*.gen.h

@@ -20,7 +20,7 @@
 #include "nsxiv.h"
 #define INCLUDE_WINDOW_CONFIG
 #include "config.h"
-#include "icon/data.h"
+#include "icon_data.h"
 
 #include <assert.h>
 #include <locale.h>
