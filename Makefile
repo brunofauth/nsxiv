@@ -18,31 +18,41 @@ nsxiv_ldlibs = -lImlib2 -lX11 \
   $(lib_exif_$(HAVE_LIBEXIF)) $(lib_fonts_$(HAVE_LIBFONTS)) \
   $(LDLIBS)
 
-objs = autoreload.o commands.o image.o main.o options.o \
-  thumbs.o util.o window.o pqueue.o
-
-.SUFFIXES:
-.SUFFIXES: .c .o
+include_dir := ./include
+build_dir := ./build
+src_dir := ./src
+sources := $(shell find $(src_dir) -iname '*.c' -printf '%p\n')
+objects = $(patsubst $(src_dir)/%.c,$(build_dir)/%.o,$(sources))
 
 all: nsxiv
 
-nsxiv: $(objs)
+nsxiv: $(objects)
 	@echo "LINK $@"
-	$(CC) $(LDFLAGS) -o $@ $(objs) $(nsxiv_ldlibs)
+	@echo $(objects)
+	$(CC) $(LDFLAGS) -o $@ $(objects) $(nsxiv_ldlibs)
 
-.c.o:
+$(build_dir):
+	mkdir -p $(build_dir)
+
+$(build_dir)/%.o: $(src_dir)/%.c | $(build_dir)
 	@echo "CC $@"
-	$(CC) $(CFLAGS) $(nsxiv_cppflags) -c -o $@ $<
+	$(CC) $(CFLAGS) $(nsxiv_cppflags) -c $< -o $@
 
-$(objs): Makefile config.mk nsxiv.h config.h commands.h
-options.o: version.h optparse.h
-window.o: icon/data.h utf8.h
+$(objects): Makefile config.mk $(include_dir)/nsxiv.h $(include_dir)/config.h $(include_dir)/commands.h
 
-config.h: config.def.h
+$(build_dir)/options.o: $(include_dir)/version.h $(include_dir)/optparse.h
+$(build_dir)/window.o: $(include_dir)/icon_data.h $(include_dir)/utf8.h
+$(include_dir)/icon_data.h: $(include_dir)/icon_data.gen.h
+
+$(include_dir)/icon_data.gen.h:
+	make -C ./icon
+	mv ./icon/data.gen.h $@
+
+$(include_dir)/config.h: config.def.h
 	@echo "GEN $@"
 	cp config.def.h $@
 
-version.h: config.mk .git/index
+$(include_dir)/version.h: config.mk .git/index
 	@echo "GEN $@"
 	v="$$(git describe 2>/dev/null || true)"; \
 	echo "#define VERSION \"$${v:-$(VERSION)}\"" >$@
@@ -53,7 +63,7 @@ dump_cppflags:
 	@echo $(nsxiv_cppflags)
 
 clean:
-	rm -f *.o nsxiv version.h
+	rm -rf $(build_dir) $(include_dir)/version.h $(include_dir)/icon_data.gen.h
 
 install-all: install install-desktop install-icon
 
@@ -81,7 +91,7 @@ uninstall-icon:
 install: all
 	@echo "INSTALL bin/nsxiv"
 	mkdir -p $(DESTDIR)$(PREFIX)/bin
-	cp nsxiv $(DESTDIR)$(PREFIX)/bin/
+	cp $(build_dir)/nsxiv $(DESTDIR)$(PREFIX)/bin/
 	chmod 755 $(DESTDIR)$(PREFIX)/bin/nsxiv
 	@echo "INSTALL nsxiv.1"
 	mkdir -p $(DESTDIR)$(MANPREFIX)/man1

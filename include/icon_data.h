@@ -9,6 +9,6 @@ typedef struct {
 
 #define ICON_(s) { s, ARRLEN(icon_data_##s), icon_data_##s }
 
-#include "data.gen.h"
+#include "icon_data.gen.h"
 
 #endif /* ICON_DATA_H */

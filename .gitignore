@@ -5,3 +5,4 @@ version.h
 nsxiv
 icon/img2data
 tags
+*.gen.h
