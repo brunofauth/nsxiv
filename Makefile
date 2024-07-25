@@ -65,7 +65,7 @@ dump_cppflags:
 
 clean:
 	@rm -rf $(build_dir) $(include_dir)/version.h $(include_dir)/icon_data.gen.h
-	@rm ./nsxiv
+	@rm ./nsxiv ./tags ./compile_commands.json
 	@echo "Cleaned!"
 
 install-all: install install-desktop install-icon
@@ -116,10 +116,12 @@ uninstall: uninstall-icon
 	@echo "REMOVE share/nsxiv/"
 	rm -rf $(DESTDIR)$(EGPREFIX)
 
-.PHONY: dev
 
-dev: compile_commands.json
+.PHONY: dev
+dev: compile_commands.json ctags
 
 compile_commands.json: $(sources)
 	bear -- make
 
+ctags: $(sources)
+	ctags -R
