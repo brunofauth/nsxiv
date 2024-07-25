@@ -27,15 +27,15 @@ objects = $(patsubst $(src_dir)/%.c,$(build_dir)/%.o,$(sources))
 all: nsxiv
 
 nsxiv: $(objects)
-	@echo "LINK $@"
+	@echo "===> LD $@"
 	@echo $(objects)
 	$(CC) $(LDFLAGS) -o $@ $(objects) $(nsxiv_ldlibs)
 
 $(build_dir):
-	mkdir -p $(build_dir)
+	@mkdir -p $(build_dir)
 
 $(build_dir)/%.o: $(src_dir)/%.c | $(build_dir)
-	@echo "CC $@"
+	@echo "===> CC $@"
 	$(CC) $(CFLAGS) $(nsxiv_cppflags) -c $< -o $@
 
 $(objects): Makefile config.mk $(include_dir)/nsxiv.h $(include_dir)/config.h $(include_dir)/commands.h
@@ -45,15 +45,16 @@ $(build_dir)/window.o: $(include_dir)/icon_data.h $(include_dir)/utf8.h
 $(include_dir)/icon_data.h: $(include_dir)/icon_data.gen.h
 
 $(include_dir)/icon_data.gen.h:
+	@echo "===> GEN $@"
 	make -C ./icon
 	mv ./icon/data.gen.h $@
 
 $(include_dir)/config.h: config.def.h
-	@echo "GEN $@"
+	@echo "===> GEN $@"
 	cp config.def.h $@
 
 $(include_dir)/version.h: config.mk .git/index
-	@echo "GEN $@"
+	@echo "===> GEN $@"
 	v="$$(git describe 2>/dev/null || true)"; \
 	echo "#define VERSION \"$${v:-$(VERSION)}\"" >$@
 
@@ -63,7 +64,8 @@ dump_cppflags:
 	@echo $(nsxiv_cppflags)
 
 clean:
-	rm -rf $(build_dir) $(include_dir)/version.h $(include_dir)/icon_data.gen.h
+	@rm -rf $(build_dir) $(include_dir)/version.h $(include_dir)/icon_data.gen.h
+	@echo "Cleaned!"
 
 install-all: install install-desktop install-icon
 
@@ -112,4 +114,12 @@ uninstall: uninstall-icon
 	rm -f $(DESTDIR)$(PREFIX)/share/applications/nsxiv.desktop
 	@echo "REMOVE share/nsxiv/"
 	rm -rf $(DESTDIR)$(EGPREFIX)
+
+.PHONY: dev
+
+dev: compile_commands.json
+
+compile_commands.json:
+	make clean
+	bear -- make
 

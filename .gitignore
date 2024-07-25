@@ -6,3 +6,4 @@ nsxiv
 icon/img2data
 tags
 *.gen.h
+/compile_commands.json
