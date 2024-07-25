@@ -37,13 +37,13 @@ void pqueue_free(pqueue_t *queue) {
 	free(queue);
 }
 
-void swap(pqueuenode_t *a, pqueuenode_t *b) {
+static void swap(pqueuenode_t *a, pqueuenode_t *b) {
 	pqueuenode_t temp = *a;
 	*a = *b;
 	*b = temp;
 }
 
-void heapify_up(pqueuenode_t *heap, size_t index) {
+static void heapify_up(pqueuenode_t *heap, size_t index) {
 	int parent = (index - 1) / 2;
 	while (index > 0 && heap[parent].priority < heap[index].priority) {
 		swap(&heap[parent], &heap[index]);
@@ -77,7 +77,7 @@ bool pqueue_enqueue(pqueue_t *queue, void *data, size_t priority) {
 	return true;
 }
 
-void heapify_down(pqueuenode_t *heap, size_t index, ssize_t heap_size) {
+static void heapify_down(pqueuenode_t *heap, size_t index, ssize_t heap_size) {
 	int leftChild = 2 * index + 1;
 	int rightChild = 2 * index + 2;
 	int largest = index;

@@ -39,7 +39,7 @@ static char *cache_dir;
 static char *cache_tmpfile, *cache_tmpfile_base;
 static const char TMP_NAME[] = "/nsxiv-XXXXXX";
 
-static char *tns_cache_filepath(const char *filepath)
+static char *tns_cache_translate_fp(const char *filepath)
 {
 	size_t len;
 	char *cfile = NULL;
@@ -64,7 +64,7 @@ static Imlib_Image tns_cache_load(const char *filepath, bool *outdated)
 	if (stat(filepath, &fstats) < 0)
 		return NULL;
 
-	if ((cfile = tns_cache_filepath(filepath)) != NULL) {
+	if ((cfile = tns_cache_translate_fp(filepath)) != NULL) {
 		if (stat(cfile, &cstats) == 0) {
 			if (cstats.st_mtime == fstats.st_mtime)
 				im = imlib_load_image(cfile);
@@ -90,7 +90,7 @@ static void tns_cache_write(Imlib_Image im, const char *filepath, bool force)
 	if (stat(filepath, &fstats) < 0)
 		return;
 
-	if ((cfile = tns_cache_filepath(filepath)) != NULL) {
+	if ((cfile = tns_cache_translate_fp(filepath)) != NULL) {
 		if (force || stat(cfile, &cstats) < 0 ||
 		    cstats.st_mtime != fstats.st_mtime)
 		{
@@ -354,7 +354,7 @@ bool tns_load(tns_t *tns, int n, bool force, bool cache_only)
 			if (imlib_image_get_width() < maxwh &&
 			    imlib_image_get_height() < maxwh)
 			{
-				if ((cfile = tns_cache_filepath(file->path)) != NULL) {
+				if ((cfile = tns_cache_translate_fp(file->path)) != NULL) {
 					unlink(cfile);
 					free(cfile);
 				}
@@ -437,6 +437,7 @@ bool tns_load(tns_t *tns, int n, bool force, bool cache_only)
 #endif
 		im = tns_scale_down(im, maxwh);
 		imlib_context_set_image(im);
+                // If the image is smaller than maxwh in both dims, we dont even cache it
 		if (imlib_image_get_width() == maxwh || imlib_image_get_height() == maxwh)
 			tns_cache_write(im, file->path, true);
 	}
@@ -450,10 +451,10 @@ bool tns_load(tns_t *tns, int n, bool force, bool cache_only)
 		t->h = imlib_image_get_height();
 		tns->dirty = true;
 	}
-	file->flags |= FF_TN_INIT;
+	file->flags |= FF_TN_IS_INIT;
 
 	if (n == tns->next_to_init) {
-		while (++tns->next_to_init < *tns->cnt && ((++file)->flags & FF_TN_INIT))
+		while (++tns->next_to_init < *tns->cnt && ((++file)->flags & FF_TN_IS_INIT))
 			;
 	}
 	if (n == tns->next_to_load_in_view && !cache_only) {

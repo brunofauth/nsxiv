@@ -1,3 +1,4 @@
+// vim: noexpandtab shiftwidth=8
 /* Copyright 2011-2020 Bert Muennich
  * Copyright 2021-2023 nsxiv contributors
  *
@@ -21,6 +22,8 @@
 #define INCLUDE_MAPPINGS_CONFIG
 #include "commands.h"
 #include "config.h"
+#include "pqueue.h"
+#include "jobq.h"
 
 #include <assert.h>
 #include <errno.h>
@@ -780,15 +783,18 @@ static void run(void)
 	bool discard, init_thumb, load_thumb, to_set;
 	XEvent ev, nextev;
 
+	pthread_t thread_pool[4];
+	jobq_pool_state_t pool_state = {.job_queue = pqueue_create(20), .keep_going = true};
+	jobq_pool_init(thread_pool, 4, &pool_state);
+
 	xbutton_ev = &ev.xbutton;
 	while (true) {
 		to_set = check_timeouts(&timeout);
 		init_thumb = mode == MODE_THUMB && tns.next_to_init < filecnt;
 		load_thumb = mode == MODE_THUMB && tns.next_to_load_in_view < tns.curr_view_end;
 
-		if ((init_thumb || load_thumb || to_set || info.fd != -1 || arl.fd != -1) &&
-		    XPending(win.env.dpy) == 0)
-		{
+                // "Only do heavy processing while there are no events to process"
+                if (XPending(win.env.dpy) == 0) {
 			if (load_thumb) {
 				set_timeout(redraw, TO_REDRAW_THUMBS, false);
 				if (!tns_load(&tns, tns.next_to_load_in_view, false, false)) {
@@ -799,11 +805,15 @@ static void run(void)
 					open_info();
 					redraw();
 				}
-			} else if (init_thumb) {
+                                continue;
+			}
+                        if (init_thumb) {
 				set_timeout(redraw, TO_REDRAW_THUMBS, false);
 				if (!tns_load(&tns, tns.next_to_init, false, true))
 					remove_file(tns.next_to_init, false);
-			} else {
+                                continue;
+			}
+                        if (to_set || info.fd != -1 || arl.fd != -1) {
 				pfd[FD_X].fd = ConnectionNumber(win.env.dpy);
 				pfd[FD_INFO].fd = info.fd;
 				pfd[FD_TITLE].fd = wintitle.fd;
@@ -822,8 +832,8 @@ static void run(void)
 					img.autoreload_pending = true;
 					set_timeout(autoreload, TO_AUTORELOAD, true);
 				}
+                                continue;
 			}
-			continue;
 		}
 
 		do {
@@ -883,6 +893,7 @@ static void run(void)
 			break;
 		}
 	}
+	printf("=========================================================================================###################################################################################\n");
 }
 
 static void setup_signal(int sig, void (*handler)(int sig), int flags)
