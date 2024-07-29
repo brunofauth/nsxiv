@@ -65,6 +65,7 @@ dump_cppflags:
 
 clean:
 	@rm -rf $(build_dir) $(include_dir)/version.h $(include_dir)/icon_data.gen.h
+	@rm ./nsxiv ./tags ./compile_commands.json
 	@echo "Cleaned!"
 
 install-all: install install-desktop install-icon
@@ -116,10 +117,11 @@ uninstall: uninstall-icon
 	rm -rf $(DESTDIR)$(EGPREFIX)
 
 .PHONY: dev
+dev: compile_commands.json ctags
 
-dev: compile_commands.json
-
-compile_commands.json:
+compile_commands.json: $(sources)
 	make clean
 	bear -- make
 
+ctags: $(sources)
+	ctags -R
