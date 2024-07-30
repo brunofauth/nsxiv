@@ -16,10 +16,12 @@ HAVE_INOTIFY = $(OPT_DEP_DEFAULT)
 HAVE_LIBFONTS = $(OPT_DEP_DEFAULT)
 HAVE_LIBEXIF  = $(OPT_DEP_DEFAULT)
 
+warning_flags := -Wall -Wextra -Wno-unused-parameter -pedantic
+
 # CFLAGS, any additional compiler flags goes here
-CFLAGS = -I./include -std=c99 -Wall -Wextra -pedantic -O2 -DNDEBUG
+CFLAGS = -I./include -std=c99 $(warning_flags) -O2 -DNDEBUG
 # Uncomment for a debug build using gcc/clang
-# CFLAGS = -I./include -std=c99 -Wall -Wextra -pedantic -DDEBUG -g3 -fsanitize=address,undefined
+# CFLAGS = -I./include -std=c99 $(warning_flags) -DDEBUG -g3 -fsanitize=address,undefined
 # LDFLAGS = $(CFLAGS)
 
 # icons that will be installed via `make icon`

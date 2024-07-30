@@ -1,3 +1,5 @@
+# vim: foldmethod=marker foldlevel=0
+
 .POSIX:
 
 include config.mk
@@ -18,11 +20,13 @@ nsxiv_ldlibs = -lImlib2 -lX11 \
   $(lib_exif_$(HAVE_LIBEXIF)) $(lib_fonts_$(HAVE_LIBFONTS)) \
   $(LDLIBS)
 
+
 include_dir := ./include
 build_dir := ./build
 src_dir := ./src
 sources := $(shell find $(src_dir) -iname '*.c' -printf '%p\n')
 objects = $(patsubst $(src_dir)/%.c,$(build_dir)/%.o,$(sources))
+
 
 all: nsxiv
 
@@ -38,16 +42,20 @@ $(build_dir)/%.o: $(src_dir)/%.c | $(build_dir)
 	@echo "===> CC $@"
 	$(CC) $(CFLAGS) $(nsxiv_cppflags) -c $< -o $@
 
-$(objects): Makefile config.mk $(include_dir)/nsxiv.h $(include_dir)/config.h $(include_dir)/commands.h
 
+$(objects): config.mk $(include_dir)/nsxiv.h $(include_dir)/config.h $(include_dir)/commands.h
 $(build_dir)/options.o: $(include_dir)/version.h $(include_dir)/optparse.h
 $(build_dir)/window.o: $(include_dir)/icon_data.h $(include_dir)/utf8.h
-$(include_dir)/icon_data.h: $(include_dir)/icon_data.gen.h
+
+
+# Header generation {{{
 
 $(include_dir)/icon_data.gen.h:
 	@echo "===> GEN $@"
 	make -C ./icon
 	mv ./icon/data.gen.h $@
+
+$(include_dir)/icon_data.h: $(include_dir)/icon_data.gen.h
 
 $(include_dir)/config.h: config.def.h
 	@echo "===> GEN $@"
@@ -60,21 +68,21 @@ $(include_dir)/version.h: config.mk .git/index
 
 .git/index:
 
-dump_cppflags:
-	@echo $(nsxiv_cppflags)
+# }}}
 
-clean:
-	@rm -rf $(build_dir) $(include_dir)/version.h $(include_dir)/icon_data.gen.h
-	@rm ./nsxiv ./tags ./compile_commands.json
-	@echo "Cleaned!"
 
+# Targets for Installing and Uninstalling {{{
+
+.PHONY: install-all
 install-all: install install-desktop install-icon
 
+.PHONY: install-desktop
 install-desktop:
 	@echo "INSTALL nsxiv.desktop"
 	mkdir -p $(DESTDIR)$(PREFIX)/share/applications
 	cp etc/nsxiv.desktop $(DESTDIR)$(PREFIX)/share/applications
 
+.PHONY: install-icon
 install-icon:
 	@echo "INSTALL icon"
 	for f in $(ICONS); do \
@@ -84,6 +92,7 @@ install-icon:
 		chmod 644 "$$dir/nsxiv.png"; \
 	done
 
+.PHONY: uninstall-icon
 uninstall-icon:
 	@echo "REMOVE icon"
 	for f in $(ICONS); do \
@@ -91,6 +100,7 @@ uninstall-icon:
 		rm -f "$$dir/nsxiv.png"; \
 	done
 
+.PHONY: install
 install: all
 	@echo "INSTALL bin/nsxiv"
 	mkdir -p $(DESTDIR)$(PREFIX)/bin
@@ -106,6 +116,7 @@ install: all
 	cp etc/examples/* $(DESTDIR)$(EGPREFIX)
 	chmod 755 $(DESTDIR)$(EGPREFIX)/*
 
+.PHONY: uninstall
 uninstall: uninstall-icon
 	@echo "REMOVE bin/nsxiv"
 	rm -f $(DESTDIR)$(PREFIX)/bin/nsxiv
@@ -116,6 +127,11 @@ uninstall: uninstall-icon
 	@echo "REMOVE share/nsxiv/"
 	rm -rf $(DESTDIR)$(EGPREFIX)
 
+# }}}
+
+
+# Phony helper targets {{{
+
 .PHONY: dev
 dev: compile_commands.json ctags
 
@@ -123,5 +139,18 @@ compile_commands.json: $(sources)
 	make clean
 	bear -- make
 
+.PHONY: ctags
 ctags: $(sources)
 	ctags -R
+
+.PHONY: dump_cppflags
+dump_cppflags:
+	@echo $(nsxiv_cppflags)
+
+.PHONY: clean
+clean:
+	@rm -rf $(build_dir) $(include_dir)/version.h $(include_dir)/icon_data.gen.h
+	@rm -f ./nsxiv ./tags ./compile_commands.json
+	@echo "Cleaned!"
+
+# }}}
