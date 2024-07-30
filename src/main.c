@@ -22,8 +22,6 @@
 #define INCLUDE_MAPPINGS_CONFIG
 #include "commands.h"
 #include "config.h"
-#include "pqueue.h"
-#include "jobq.h"
 
 #include <assert.h>
 #include <errno.h>
@@ -97,12 +95,12 @@ static struct {
 	struct timeval when;
 	bool active;
 } timeouts[] = {
-	{ autoreload   },
-	{ redraw       },
-	{ reset_cursor },
-	{ slideshow    },
-	{ animate      },
-	{ clear_resize },
+	{ .handler = autoreload   },
+	{ .handler = redraw       },
+	{ .handler = reset_cursor },
+	{ .handler = slideshow    },
+	{ .handler = animate      },
+	{ .handler = clear_resize },
 };
 
 /*
@@ -782,10 +780,6 @@ static void run(void)
 	int timeout = 0;
 	bool discard, init_thumb, load_thumb, to_set;
 	XEvent ev, nextev;
-
-	pthread_t thread_pool[4];
-	jobq_pool_state_t pool_state = {.job_queue = pqueue_create(20), .keep_going = true};
-	jobq_pool_init(thread_pool, 4, &pool_state);
 
 	xbutton_ev = &ev.xbutton;
 	while (true) {
