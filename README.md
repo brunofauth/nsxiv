@@ -14,11 +14,20 @@ upstream README.md
   **upscaled** cropped versions of the "usual-aspect ratio" images (and those 
   can get very grainy and ugly). In other words: my square thumbnails trade 
   disk space for prettiness, that's the selling point!
+    - Adjustable with these options: `square_thumbnails`
 
 * Highlight markers are now big, loud, obnoxious and occupy a significant part 
   of each image, so that you never overlook them! Furthermore, the whole image 
   gets tinted red (thats adjustable) behind said marker. There's really no way 
   to miss it.
+    - Adjustable with these options: `MARK_BORDER_SIZE`, `MCM_TINT`
+
+* Added the option `HIDDEN_THUMBS_TO_KEEP_LOADED`, which can be used to keep a 
+  number of thumbnails before and after the currently visible ones loaded into 
+  memory, even when not visible. That's useful if you, like me, have lots of 
+  RAM but a slow CPU. Set this option to a negative number to never unload 
+  images. Defaults to `-1`.
+    - Adjustable with these options: `HIDDEN_THUMBS_TO_KEEP_LOADED`
 
 ----------------------
 
