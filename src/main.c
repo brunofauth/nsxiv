@@ -367,16 +367,18 @@ void open_info(void)
 
 static void read_info(void)
 {
-    ssize_t i, n;
-
-    if ((n = read(info.fd, win.bar.l.buf, win.bar.l.size - 1)) > 0) {
-        win.bar.l.buf[n] = '\0';
-        for (i = 0; i < n; ++i) {
-            if (win.bar.l.buf[i] == '\n')
-                win.bar.l.buf[i] = ' ';
-        }
-        win_draw(&win);
+    ssize_t n = read(info.fd, win.bar.l.buf, win.bar.l.size - 1);
+    if (n <= 0) {
+        close_info();
+        return;
     }
+
+    win.bar.l.buf[n] = '\0';
+    for (ssize_t i = 0; i < n; ++i) {
+        if (win.bar.l.buf[i] == '\n')
+            win.bar.l.buf[i] = ' ';
+    }
+    win_draw(&win);
     close_info();
 }
 
@@ -443,7 +445,6 @@ static void bar_put(win_bar_t *bar, const char *fmt, ...)
 
 static void update_info(void)
 {
-    unsigned int i, fn, fw;
     const char *mark;
     win_bar_t *l = &win.bar.l, *r = &win.bar.r;
 
@@ -473,8 +474,10 @@ static void update_info(void)
     prev.zoom = img.zoom;
     prev.mode = mode;
 
-    for (fw = 0, i = filecnt; i > 0; fw++, i /= 10)
+    uint32_t fw = 0;
+    for (uint32_t i = filecnt; i > 0; fw++, i /= 10)
         ;
+
     mark = files[fileidx].flags & FF_MARK ? "* " : "";
     l->p = l->buf;
     r->p = r->buf;
@@ -501,11 +504,14 @@ static void update_info(void)
         if (img.contrast)
             bar_put(r, "C%+d" BAR_SEP, img.contrast);
         bar_put(r, "%3d%%" BAR_SEP, (int)(img.zoom * 100.0));
+
         if (img.multi.cnt > 0) {
-            for (fn = 0, i = img.multi.cnt; i > 0; fn++, i /= 10)
+            uint32_t fn = 0;
+            for (uint32_t i = img.multi.cnt; i > 0; fn++, i /= 10)
                 ;
             bar_put(r, "%0*d/%d" BAR_SEP, fn, img.multi.sel + 1, img.multi.cnt);
         }
+
         bar_put(r, "%0*d/%d", fw, fileidx + 1, filecnt);
         if (info.f.err)
             strncpy(l->buf, files[fileidx].name, l->size);
@@ -525,20 +531,17 @@ int nav_button(void)
 
     if (x < nw)
         return 0;
-    else if (x < (int)win.w - nw)
+    if (x < (int)win.w - nw)
         return 1;
-    else
-        return 2;
+    return 2;
 }
 
 void redraw(void)
 {
-    int t;
-
     if (mode == MODE_IMAGE) {
         img_render(&img);
         if (img.ss.on) {
-            t = img.ss.delay * 100;
+            int t = img.ss.delay * 100;
             if (img.multi.cnt > 0 && img.multi.animate)
                 t = MAX(t, img.multi.length);
             set_timeout(slideshow, t, false);
@@ -554,27 +557,24 @@ void redraw(void)
 
 void reset_cursor(void)
 {
-    int c;
-    unsigned int i;
-    cursor_t cursor = CURSOR_NONE;
+    if (mode != MODE_IMAGE) {
+        win_set_cursor(&win, 
+            (tns.next_to_load_in_view < tns.visible_thumbs.end || tns.next_to_init < filecnt)
+                ? CURSOR_WATCH : CURSOR_ARROW);
+        return;
+    }
 
-    if (mode == MODE_IMAGE) {
-        for (i = 0; i < ARRLEN(timeouts); i++) {
-            if (timeouts[i].handler == reset_cursor) {
-                if (timeouts[i].active) {
-                    c = nav_button();
-                    c = MAX(fileidx > 0 ? 0 : 1, c);
-                    c = MIN(fileidx + 1 < filecnt ? 2 : 1, c);
-                    cursor = imgcursor[c];
-                }
-                break;
+    cursor_t cursor = CURSOR_NONE;
+    for (uint32_t i = 0; i < ARRLEN(timeouts); i++) {
+        if (timeouts[i].handler == reset_cursor) {
+            if (timeouts[i].active) {
+                int c = nav_button();
+                c = MAX(fileidx > 0 ? 0 : 1, c);
+                c = MIN(fileidx + 1 < filecnt ? 2 : 1, c);
+                cursor = imgcursor[c];
             }
+            break;
         }
-    } else {
-        if (tns.next_to_load_in_view < tns.visible_thumbs.end || tns.next_to_init < filecnt)
-            cursor = CURSOR_WATCH;
-        else
-            cursor = CURSOR_ARROW;
     }
     win_set_cursor(&win, cursor);
 }

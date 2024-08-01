@@ -75,8 +75,6 @@ static char *arl_scratch_push(const char *filepath, size_t len)
 
 void arl_add(arl_t *arl, const char *filepath)
 {
-    char *base, *dir;
-
     if (arl->fd == -1)
         return;
 
@@ -84,9 +82,9 @@ void arl_add(arl_t *arl, const char *filepath)
     rm_watch(arl->fd, &arl->wd_file);
     add_watch(arl->fd, &arl->wd_file, filepath, IN_CLOSE_WRITE | IN_DELETE_SELF);
 
-    base = strrchr(filepath, '/');
+    const char *base = strrchr(filepath, '/');
     assert(base != NULL && "filepath must be result of realpath(3)");
-    dir = arl_scratch_push(filepath, MAX(base - filepath, 1));
+    const char *dir = arl_scratch_push(filepath, MAX(base - filepath, 1));
     add_watch(arl->fd, &arl->wd_dir, dir, IN_CREATE | IN_MOVED_TO);
     arl->filename = arl_scratch_push(base + 1, strlen(base + 1));
 }
@@ -94,30 +92,30 @@ void arl_add(arl_t *arl, const char *filepath)
 bool arl_handle(arl_t *arl)
 {
     bool reload = false;
-    char *ptr;
-    const struct inotify_event *e;
-    /* inotify_event aligned buffer */
-    static union {
-        char d[4096];
-        struct inotify_event e;
-    } buf;
+    const struct inotify_event *inotify_event;
 
     while (true) {
-        ssize_t len = read(arl->fd, buf.d, sizeof(buf.d));
+        /* inotify_event aligned buffer */
+        static union {
+            char d[4096];
+            struct inotify_event e;
+        } buf;
 
+        ssize_t len = read(arl->fd, buf.d, sizeof(buf.d));
         if (len == -1) {
             if (errno == EINTR)
                 continue;
             break;
         }
-        for (ptr = buf.d; ptr < buf.d + len; ptr += sizeof(*e) + e->len) {
-            e = (const struct inotify_event *)ptr;
-            if (e->wd == arl->wd_file && (e->mask & IN_CLOSE_WRITE)) {
+
+        for (char *ptr = buf.d; ptr < buf.d + len; ptr += sizeof(*inotify_event) + inotify_event->len) {
+            inotify_event = (const struct inotify_event *)ptr;
+            if (inotify_event->wd == arl->wd_file && (inotify_event->mask & IN_CLOSE_WRITE)) {
                 reload = true;
-            } else if (e->wd == arl->wd_file && (e->mask & IN_DELETE_SELF)) {
+            } else if (inotify_event->wd == arl->wd_file && (inotify_event->mask & IN_DELETE_SELF)) {
                 rm_watch(arl->fd, &arl->wd_file);
-            } else if (e->wd == arl->wd_dir && (e->mask & (IN_CREATE | IN_MOVED_TO))) {
-                if (STREQ(e->name, arl->filename))
+            } else if (inotify_event->wd == arl->wd_dir && (inotify_event->mask & (IN_CREATE | IN_MOVED_TO))) {
+                if (STREQ(inotify_event->name, arl->filename))
                     reload = true;
             }
         }

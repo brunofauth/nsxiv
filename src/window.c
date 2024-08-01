@@ -346,17 +346,17 @@ CLEANUP void win_close(win_t *win)
     XCloseDisplay(win->env.dpy);
 }
 
-bool win_configure(win_t *win, XConfigureEvent *c)
+bool win_configure(win_t *win, const XConfigureEvent *event)
 {
     bool changed;
 
-    changed = win->w != (unsigned int)c->width || win->h + win->bar.h != (unsigned int)c->height;
+    changed = win->w != (unsigned int)event->width || win->h + win->bar.h != (unsigned int)event->height;
 
-    win->x = c->x;
-    win->y = c->y;
-    win->w = c->width;
-    win->h = c->height - win->bar.h;
-    win->bw = c->border_width;
+    win->x = event->x;
+    win->y = event->y;
+    win->w = event->width;
+    win->h = event->height - win->bar.h;
+    win->bw = event->border_width;
 
     return changed;
 }
@@ -450,38 +450,36 @@ static int win_draw_text(win_t *win, XftDraw *d, const XftColor *color,
 
 static void win_draw_bar(win_t *win)
 {
-    int len, x, y, w, tw;
-    win_env_t *e;
-    win_bar_t *l, *r;
-    XftDraw *d;
-
-    e = &win->env;
-    l = &win->bar.l;
-    r = &win->bar.r;
+    win_env_t *window_env = &win->env;
+    win_bar_t *bar_l = &win->bar.l;
+    win_bar_t *bar_r = &win->bar.r;
     assert(l->buf != NULL && r->buf != NULL);
-    y = (win->bar.top ? 0 : win->h) + font->ascent + V_TEXT_PAD;
-    w = win->w - 2 * H_TEXT_PAD;
-    d = XftDrawCreate(e->dpy, win->buf.pm, e->vis, e->cmap);
 
-    XSetForeground(e->dpy, gc, win->bar_bg.pixel);
-    XFillRectangle(e->dpy, win->buf.pm, gc, 0, win->bar.top ? 0 : win->h, win->w, win->bar.h);
+    int y = (win->bar.top ? 0 : win->h) + font->ascent + V_TEXT_PAD;
+    int w = win->w - 2 * H_TEXT_PAD;
+    XftDraw *drawing = XftDrawCreate(window_env->dpy, win->buf.pm, window_env->vis, window_env->cmap);
 
-    XSetForeground(e->dpy, gc, win->win_bg.pixel);
-    XSetBackground(e->dpy, gc, win->bar_bg.pixel);
+    XSetForeground(window_env->dpy, gc, win->bar_bg.pixel);
+    XFillRectangle(window_env->dpy, win->buf.pm, gc, 0, win->bar.top ? 0 : win->h, win->w, win->bar.h);
 
-    if ((len = strlen(r->buf)) > 0) {
-        if ((tw = TEXTWIDTH(win, r->buf, len)) <= w) {
-            x = win->w - tw - H_TEXT_PAD;
-            win_draw_text(win, d, &win->bar_fg, x, y, r->buf, len, tw);
+    XSetForeground(window_env->dpy, gc, win->win_bg.pixel);
+    XSetBackground(window_env->dpy, gc, win->bar_bg.pixel);
+
+    int len, x;
+    if ((len = strlen(bar_r->buf)) > 0) {
+        int text_width;
+        if ((text_width = TEXTWIDTH(win, bar_r->buf, len)) <= w) {
+            x = win->w - text_width - H_TEXT_PAD;
+            win_draw_text(win, drawing, &win->bar_fg, x, y, bar_r->buf, len, text_width);
         }
         /* remaining width, also keeping gap between left and right parts */
-        w -= tw + (2 * H_TEXT_PAD);
+        w -= text_width + (2 * H_TEXT_PAD);
     }
-    if ((len = strlen(l->buf)) > 0 && w > 0) {
+    if ((len = strlen(bar_l->buf)) > 0 && w > 0) {
         x = H_TEXT_PAD;
-        win_draw_text(win, d, &win->bar_fg, x, y, l->buf, len, w);
+        win_draw_text(win, drawing, &win->bar_fg, x, y, bar_l->buf, len, w);
     }
-    XftDrawDestroy(d);
+    XftDrawDestroy(drawing);
 }
 #else
 static void win_draw_bar(win_t *win)
@@ -503,26 +501,19 @@ void win_draw(win_t *win)
 void win_draw_rect(win_t *window, int x, int y, int w, int h, bool fill, int line_width,
                    unsigned long color)
 {
-    XGCValues gcval;
-
-    gcval.line_width = line_width;
-    gcval.foreground = color;
+    XGCValues gcval = { .line_style=line_width, .foreground=color };
     XChangeGC(window->env.dpy, gc, GCForeground | GCLineWidth, &gcval);
-
-    if (fill)
-        XFillRectangle(window->env.dpy, window->buf.pm, gc, x, y, w, h);
-    else
-        XDrawRectangle(window->env.dpy, window->buf.pm, gc, x, y, w, h);
+    (fill ? XFillRectangle : XDrawRectangle)(window->env.dpy, window->buf.pm, gc, x, y, w, h);
 }
 
 void win_set_title(win_t *win, const char *title, size_t len)
 {
-    int i, targets[] = { ATOM_WM_NAME, ATOM_WM_ICON_NAME, ATOM__NET_WM_NAME, ATOM__NET_WM_ICON_NAME };
+    const int targets[] = { ATOM_WM_NAME, ATOM_WM_ICON_NAME, ATOM__NET_WM_NAME, ATOM__NET_WM_ICON_NAME };
 
-    for (i = 0; i < (int)ARRLEN(targets); ++i) {
+    for (size_t i = 0; i < ARRLEN(targets); ++i) {
         XChangeProperty(win->env.dpy, win->xwin, atoms[targets[i]],
-                        atoms[ATOM_UTF8_STRING], 8, PropModeReplace,
-                        (unsigned char *)title, len);
+                atoms[ATOM_UTF8_STRING], 8, PropModeReplace,
+                (unsigned char *)title, len);
     }
 }
 

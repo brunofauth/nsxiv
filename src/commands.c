@@ -47,10 +47,8 @@ static bool navigate_to(arg_t n)
 
 bool cg_quit(arg_t status)
 {
-    unsigned int i;
-
     if (options->to_stdout && markcnt > 0) {
-        for (i = 0; i < (unsigned int)filecnt; i++) {
+        for (size_t i = 0; i < (size_t)filecnt; i++) {
             if (files[i].flags & FF_MARK)
                 printf("%s%c", files[i].name, options->using_null ? '\0' : '\n');
         }

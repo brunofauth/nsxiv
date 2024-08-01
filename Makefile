@@ -153,4 +153,17 @@ clean:
 	@rm -f ./nsxiv ./tags ./compile_commands.json
 	@echo "Cleaned!"
 
+.PHONY: lint
+lint: compile_commands.json
+	cppcheck --project=compile_commands.json --check-level=exhaustive \
+		--enable=warning,style
+
+	# warning: Enable warning messages
+	# style: Enable all coding style checks. Implies 'performance' and 'portability'
+	# performance: Enable performance messages
+	# portability: Enable portability messages
+	# information: Enable information messages
+	# unusedFunction: Check for unused functions.
+	# missingInclude: Warn if there are missing includes
+
 # }}}

@@ -460,15 +460,15 @@ extern Atom atoms[ATOM_COUNT];
 void win_init(win_t*);
 void win_open(win_t*);
 CLEANUP void win_close(win_t*);
-bool win_configure(win_t*, XConfigureEvent*);
+bool win_configure(win_t*, const XConfigureEvent*);
 void win_toggle_fullscreen(win_t*);
 void win_toggle_bar(win_t*);
 void win_clear(win_t*);
 void win_draw(win_t*);
 void win_draw_rect(win_t *window, int x, int y, int w, int h, bool fill, int line_width, unsigned long color);
-void win_set_title(win_t*, const char*, size_t);
+void win_set_title(win_t*, const char *title, size_t length);
 void win_set_cursor(win_t*, cursor_t);
-void win_cursor_pos(win_t*, int*, int*);
+void win_cursor_pos(win_t*, int *x, int *y);
 
 /* main.c */
 

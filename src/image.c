@@ -488,17 +488,16 @@ void img_render(img_t *img)
         imlib_image_set_has_alpha(0);
 
         if (img->alpha_layer) {
-            int i, c, r;
-            uint32_t col[2] = { 0xFF666666, 0xFF999999 };
+            const uint32_t col[2] = { 0xFF666666, 0xFF999999 };
             uint32_t *data = imlib_image_get_data();
 
-            for (r = 0; r < dh; r++) {
-                i = r * dw;
-                if (r == 0 || r == 8) {
-                    for (c = 0; c < dw; c++)
-                    	data[i++] = col[!(c & 8) ^ !r];
+            for (int row_offset = 0; row_offset < dh; row_offset++) {
+                int i = row_offset * dw;
+                if (row_offset == 0 || row_offset == 8) {
+                    for (int col_offset = 0; col_offset < dw; col_offset++)
+                    	data[i++] = col[!(col_offset & 8) ^ !row_offset];
                 } else {
-                    memcpy(&data[i], &data[(r & 8) * dw], dw * sizeof(data[0]));
+                    memcpy(&data[i], &data[(row_offset & 8) * dw], dw * sizeof(data[0]));
                 }
             }
             imlib_image_put_back_data(data);
@@ -661,26 +660,23 @@ bool img_pan_edge(img_t *img, direction_t dir)
 
 void img_rotate(img_t *img, degree_t d)
 {
-    unsigned int i, tmp;
-    float ox, oy;
-
     imlib_context_set_image(img->im);
     imlib_image_orientate(d);
 
-    for (i = 0; i < img->multi.cnt; i++) {
+    for (size_t i = 0; i < img->multi.cnt; i++) {
         if (i != img->multi.sel) {
             imlib_context_set_image(img->multi.frames[i].im);
             imlib_image_orientate(d);
         }
     }
     if (d == DEGREE_90 || d == DEGREE_270) {
-        ox = d == DEGREE_90  ? img->x : img->win->w - img->x - img->w * img->zoom;
-        oy = d == DEGREE_270 ? img->y : img->win->h - img->y - img->h * img->zoom;
+        float ox = d == DEGREE_90  ? img->x : img->win->w - img->x - img->w * img->zoom;
+        float oy = d == DEGREE_270 ? img->y : img->win->h - img->y - img->h * img->zoom;
 
         img->x = oy + (int)(img->win->w - img->win->h) / 2;
         img->y = ox + (int)(img->win->h - img->win->w) / 2;
 
-        tmp = img->w;
+        int tmp = img->w;
         img->w = img->h;
         img->h = tmp;
         img->checkpan = true;
