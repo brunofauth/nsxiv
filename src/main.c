@@ -480,7 +480,7 @@ static void update_info(void)
 	l->p = l->buf;
 	r->p = r->buf;
 	if (mode == MODE_THUMB) {
-		if (tns.next_to_load_in_view < tns.visible_thumbs_end)
+		if (tns.next_to_load_in_view < tns.visible_thumbs.end)
 			bar_put(r, "Loading... %0*d | ", fw, tns.next_to_load_in_view + 1);
 		else if (tns.next_to_init < filecnt)
 			bar_put(r, "Caching... %0*d | ", fw, tns.next_to_init + 1);
@@ -572,7 +572,7 @@ void reset_cursor(void)
 			}
 		}
 	} else {
-		if (tns.next_to_load_in_view < tns.visible_thumbs_end || tns.next_to_init < filecnt)
+		if (tns.next_to_load_in_view < tns.visible_thumbs.end || tns.next_to_init < filecnt)
 			cursor = CURSOR_WATCH;
 		else
 			cursor = CURSOR_ARROW;
@@ -785,7 +785,7 @@ static void run(void)
 	while (true) {
 		to_set = check_timeouts(&timeout);
 		init_thumb = mode == MODE_THUMB && tns.next_to_init < filecnt;
-		load_thumb = mode == MODE_THUMB && tns.next_to_load_in_view < tns.visible_thumbs_end;
+		load_thumb = mode == MODE_THUMB && tns.next_to_load_in_view < tns.visible_thumbs.end;
 
                 // "Only do heavy processing while there are no events to process"
                 if (XPending(win.env.dpy) == 0) {
@@ -795,7 +795,7 @@ static void run(void)
 					remove_file(tns.next_to_load_in_view, false);
 					tns.dirty = true;
 				}
-				if (tns.next_to_load_in_view >= tns.visible_thumbs_end) {
+				if (tns.next_to_load_in_view >= tns.visible_thumbs.end) {
 					open_info();
 					redraw();
 				}

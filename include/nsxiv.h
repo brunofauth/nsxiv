@@ -323,8 +323,6 @@ struct tns {
 	int *sel;
 	int next_to_init;
 	int next_to_load_in_view;
-	int visible_thumbs_first, visible_thumbs_end;
-	int loaded_thumbs_first, loaded_thumbs_end;
         IndexRange visible_thumbs;
         IndexRange loaded_thumbs;
 
