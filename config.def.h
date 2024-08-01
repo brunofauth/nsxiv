@@ -95,6 +95,13 @@ static const int MARK_BORDER_SIZE = 2;
 /* Tint values for the color modifier of thumbnail markers; R-G-B-A */
 static const float MCM_TINT[] = {1.0, 0.5, 0.5, 1.0};
 
+// How many thumbnails to keep from unloading, before and after the currently
+// visible thumbnail set. If given a negative number, no thumbnails will be
+// unloaded. To emulate old-school sxiv, use a value of 0. This option is good
+// if you, like me, have hundreds of pictures and lots of RAM to waste but a
+// slow CPU
+static const int HIDDEN_THUMBS_TO_KEEP_LOADED = -1;
+
 #endif
 #ifdef INCLUDE_MAPPINGS_CONFIG
 

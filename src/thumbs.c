@@ -35,6 +35,7 @@
 #include <libexif/exif-data.h>
 #endif
 
+
 static char *cache_dir;
 static char *cache_tmpfile, *cache_tmpfile_base;
 static const char TMP_NAME[] = "/nsxiv-XXXXXX";
@@ -538,14 +539,17 @@ void tns_render(tns_t *tns)
 	tns->next_to_load_in_view = *tns->cnt;
 	tns->visible_thumbs.end = tns->visible_thumbs.start + cnt;
 
-	// Unload thumbs from other views/pages
-	for (i = tns->loaded_thumbs.start; i < tns->loaded_thumbs.end; i++) {
-                // Check if said thumb is outside of the current view
-		if ((i < tns->visible_thumbs.start || i >= tns->visible_thumbs.end) && tns->thumbs[i].im != NULL)
-			tns_unload(tns, i);
+	if (HIDDEN_THUMBS_TO_KEEP_LOADED >= 0) {
+		IndexRange new_visible_thumbs = IndexRange_widen(tns->visible_thumbs, HIDDEN_THUMBS_TO_KEEP_LOADED); 
+		// Unload thumbs from other views/pages
+		for (i = tns->loaded_thumbs.start; i < tns->loaded_thumbs.end; i++) {
+			// Check if said thumb is outside of the current view
+			if (!IndexRange_contains(new_visible_thumbs, i) && tns->thumbs[i].im != NULL)
+				tns_unload(tns, i);
+		}
+		tns->loaded_thumbs.start = tns->visible_thumbs.start;
+		tns->loaded_thumbs.end = tns->visible_thumbs.end;
 	}
-	tns->loaded_thumbs.start = tns->visible_thumbs.start;
-	tns->loaded_thumbs.end = tns->visible_thumbs.end;
 
 	for (i = tns->visible_thumbs.start; i < tns->visible_thumbs.end; i++) {
 		t = &tns->thumbs[i];
