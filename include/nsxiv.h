@@ -43,6 +43,9 @@
 #define ARRLEN(a) (sizeof(a) / sizeof((a)[0]))
 #define STREQ(s1,s2) (strcmp((s1), (s2)) == 0)
 
+#include "range.h"
+
+
 typedef enum {
 	MODE_ALL,
 	MODE_IMAGE,
@@ -320,8 +323,10 @@ struct tns {
 	int *sel;
 	int next_to_init;
 	int next_to_load_in_view;
-	int curr_view_first, curr_view_end;
-	int prev_view_first, prev_view_end;
+	int visible_thumbs_first, visible_thumbs_end;
+	int loaded_thumbs_first, loaded_thumbs_end;
+        IndexRange visible_thumbs;
+        IndexRange loaded_thumbs;
 
 	win_t *win;
 	int x;

@@ -192,7 +192,7 @@ void tns_init(tns_t *tns, fileinfo_t *tns_files, const int *cnt, int *sel, win_t
 	tns->files = tns_files;
 	tns->cnt = cnt;
 	tns->next_to_init = tns->next_to_load_in_view = 0;
-	tns->curr_view_first = tns->curr_view_end = tns->prev_view_first = tns->prev_view_end = 0;
+	tns->visible_thumbs_first = tns->visible_thumbs_end = tns->loaded_thumbs_first = tns->loaded_thumbs_end = 0;
 	tns->sel = sel;
 	tns->win = win;
 	tns->dirty = false;
@@ -264,7 +264,7 @@ CLEANUP void tns_replace(tns_t *tns, fileinfo_t *tns_files, const int *cnt, int 
 	tns->files = tns_files;
 	tns->cnt = cnt;
 	tns->next_to_init = tns->next_to_load_in_view = 0;
-	tns->curr_view_first = tns->curr_view_end = tns->prev_view_first = tns->prev_view_end = 0;
+	tns->visible_thumbs_first = tns->visible_thumbs_end = tns->loaded_thumbs_first = tns->loaded_thumbs_end = 0;
 	tns->sel = sel;
 	tns->win = win;
 	tns->dirty = true;
@@ -458,7 +458,7 @@ bool tns_load(tns_t *tns, int n, bool force, bool cache_only)
 			;
 	}
 	if (n == tns->next_to_load_in_view && !cache_only) {
-		while (++tns->next_to_load_in_view < tns->curr_view_end && (++t)->im != NULL)
+		while (++tns->next_to_load_in_view < tns->visible_thumbs_end && (++t)->im != NULL)
 			;
 	}
 
@@ -481,22 +481,22 @@ static void tns_check_view(tns_t *tns, bool scrolled)
 	int r;
 
 	assert(tns != NULL);
-	tns->curr_view_first -= tns->curr_view_first % tns->cols;
+	tns->visible_thumbs_first -= tns->visible_thumbs_first % tns->cols;
 	r = *tns->sel % tns->cols;
 
 	if (scrolled) {
 		/* move selection into visible area */
-		if (*tns->sel >= tns->curr_view_first + tns->cols * tns->rows)
-			*tns->sel = tns->curr_view_first + r + tns->cols * (tns->rows - 1);
-		else if (*tns->sel < tns->curr_view_first)
-			*tns->sel = tns->curr_view_first + r;
+		if (*tns->sel >= tns->visible_thumbs_first + tns->cols * tns->rows)
+			*tns->sel = tns->visible_thumbs_first + r + tns->cols * (tns->rows - 1);
+		else if (*tns->sel < tns->visible_thumbs_first)
+			*tns->sel = tns->visible_thumbs_first + r;
 	} else {
 		/* scroll to selection */
-		if (tns->curr_view_first + tns->cols * tns->rows <= *tns->sel) {
-			tns->curr_view_first = *tns->sel - r - tns->cols * (tns->rows - 1);
+		if (tns->visible_thumbs_first + tns->cols * tns->rows <= *tns->sel) {
+			tns->visible_thumbs_first = *tns->sel - r - tns->cols * (tns->rows - 1);
 			tns->dirty = true;
-		} else if (tns->curr_view_first > *tns->sel) {
-			tns->curr_view_first = *tns->sel - r;
+		} else if (tns->visible_thumbs_first > *tns->sel) {
+			tns->visible_thumbs_first = *tns->sel - r;
 			tns->dirty = true;
 		}
 	}
@@ -521,13 +521,13 @@ void tns_render(tns_t *tns)
 	cell_side = thumb_sizes[tns->zoom_level];
 
 	if (*tns->cnt < grid_capacity) {
-		tns->curr_view_first = 0;
+		tns->visible_thumbs_first = 0;
 		cnt = *tns->cnt;
 	} else {
 		tns_check_view(tns, false);
 		cnt = grid_capacity;
-		if ((r = tns->curr_view_first + cnt - *tns->cnt) >= tns->cols)
-			tns->curr_view_first -= r - r % tns->cols;
+		if ((r = tns->visible_thumbs_first + cnt - *tns->cnt) >= tns->cols)
+			tns->visible_thumbs_first -= r - r % tns->cols;
 		if (r > 0)
 			cnt -= r % tns->cols;
 	}
@@ -536,18 +536,18 @@ void tns_render(tns_t *tns)
 	tns->y = grid_y = (win->h - (cnt / tns->cols + r) * tns->dim) / 2 + tns->border_width + 3 +
 	             (win->bar.top ? win->bar.h : 0);
 	tns->next_to_load_in_view = *tns->cnt;
-	tns->curr_view_end = tns->curr_view_first + cnt;
+	tns->visible_thumbs_end = tns->visible_thumbs_first + cnt;
 
 	// Unload thumbs from other views/pages
-	for (i = tns->prev_view_first; i < tns->prev_view_end; i++) {
+	for (i = tns->loaded_thumbs_first; i < tns->loaded_thumbs_end; i++) {
                 // Check if said thumb is outside of the current view
-		if ((i < tns->curr_view_first || i >= tns->curr_view_end) && tns->thumbs[i].im != NULL)
+		if ((i < tns->visible_thumbs_first || i >= tns->visible_thumbs_end) && tns->thumbs[i].im != NULL)
 			tns_unload(tns, i);
 	}
-	tns->prev_view_first = tns->curr_view_first;
-	tns->prev_view_end = tns->curr_view_end;
+	tns->loaded_thumbs_first = tns->visible_thumbs_first;
+	tns->loaded_thumbs_end = tns->visible_thumbs_end;
 
-	for (i = tns->curr_view_first; i < tns->curr_view_end; i++) {
+	for (i = tns->visible_thumbs_first; i < tns->visible_thumbs_end; i++) {
 		t = &tns->thumbs[i];
 		// TODO: figure out at which times t->im can be NULL here
 		if (t->im == NULL) {
@@ -655,11 +655,6 @@ void tns_mark(tns_t *tns, int n, bool mark)
 
 	if (filtered != NULL)
 		free(filtered);
-
-	//// The lines below aren't needed for now, as markers no longer are drawn over
-	//// highlighting frames. Maybe I'll need them in the future? We'll see...
-	// if (!mark && n == *tns->sel)
-	// 	tns_highlight(tns, n, true);
 }
 
 void tns_highlight(tns_t *tns, int n, bool hl)
@@ -687,16 +682,9 @@ void tns_highlight(tns_t *tns, int n, bool hl)
 		int h = scaled_h + offset_wh;
 	    	win_draw_rect(win, t->x - offset_xy, t->y - offset_xy, w, h, false, tns->border_width, color);
 	}
-
-	// // TODO: are these two lines still needed given the new marking system?
-	// // I guess they were put there because, I think, the highlighting frames
-	// // would be rendered over said marks, but we don't do that anymore.
-	// if (tns->files[n].flags & FF_MARK)
-	// 	tns_mark(tns, n, true);
-
 }
 
-bool tns_move_selection(tns_t *tns, direction_t dir, int cnt)
+bool tns_move_selection(tns_t *tns, const direction_t dir, int cnt)
 {
 	int old, max;
 
@@ -729,30 +717,30 @@ bool tns_move_selection(tns_t *tns, direction_t dir, int cnt)
 	return *tns->sel != old;
 }
 
-bool tns_scroll(tns_t *tns, direction_t dir, bool screen)
+bool tns_scroll(tns_t *tns, const direction_t dir, const bool screen)
 {
 	int d, max, old;
 
-	old = tns->curr_view_first;
+	old = tns->visible_thumbs_first;
 	d = tns->cols * (screen ? tns->rows : 1);
 
 	if (dir == DIR_DOWN) {
 		max = *tns->cnt - tns->cols * tns->rows;
 		if (*tns->cnt % tns->cols != 0)
 			max += tns->cols - *tns->cnt % tns->cols;
-		tns->curr_view_first = MIN(tns->curr_view_first + d, max);
+		tns->visible_thumbs_first = MIN(tns->visible_thumbs_first + d, max);
 	} else if (dir == DIR_UP) {
-		tns->curr_view_first = MAX(tns->curr_view_first - d, 0);
+		tns->visible_thumbs_first = MAX(tns->visible_thumbs_first - d, 0);
 	}
 
-	if (tns->curr_view_first != old) {
+	if (tns->visible_thumbs_first != old) {
 		tns_check_view(tns, true);
 		tns->dirty = true;
 	}
-	return tns->curr_view_first != old;
+	return tns->visible_thumbs_first != old;
 }
 
-bool tns_zoom(tns_t *tns, int d)
+bool tns_zoom(tns_t *tns, const int d)
 {
 	int i, oldzl, tn_cell_size;
 
@@ -774,14 +762,14 @@ bool tns_zoom(tns_t *tns, int d)
 	return tns->zoom_level != oldzl;
 }
 
-int tns_translate(tns_t *tns, int x, int y)
+int tns_translate(tns_t *tns, const int x, const int y)
 {
 	int n;
 
 	if (x < tns->x || y < tns->y)
 		return -1;
 
-	n = tns->curr_view_first + (y - tns->y) / tns->dim * tns->cols +
+	n = tns->visible_thumbs_first + (y - tns->y) / tns->dim * tns->cols +
 	    (x - tns->x) / tns->dim;
 	if (n >= *tns->cnt)
 		n = -1;
