@@ -29,124 +29,124 @@
 #include <unistd.h>
 
 static struct {
-	char *buf;
-	size_t len;
+    char *buf;
+    size_t len;
 } scratch;
 
 void arl_init(arl_t *arl)
 {
-	arl->fd = inotify_init1(IN_CLOEXEC | IN_NONBLOCK);
-	arl->wd_dir = arl->wd_file = -1;
-	if (arl->fd == -1)
-		error(0, 0, "Could not initialize inotify, no automatic image reloading");
+    arl->fd = inotify_init1(IN_CLOEXEC | IN_NONBLOCK);
+    arl->wd_dir = arl->wd_file = -1;
+    if (arl->fd == -1)
+        error(0, 0, "Could not initialize inotify, no automatic image reloading");
 }
 
 CLEANUP void arl_cleanup(arl_t *arl)
 {
-	if (arl->fd != -1)
-		close(arl->fd);
-	free(scratch.buf);
+    if (arl->fd != -1)
+        close(arl->fd);
+    free(scratch.buf);
 }
 
 static void rm_watch(int fd, int *wd)
 {
-	if (*wd != -1) {
-		inotify_rm_watch(fd, *wd);
-		*wd = -1;
-	}
+    if (*wd != -1) {
+        inotify_rm_watch(fd, *wd);
+        *wd = -1;
+    }
 }
 
 static void add_watch(int fd, int *wd, const char *path, uint32_t mask)
 {
-	*wd = inotify_add_watch(fd, path, mask);
-	if (*wd == -1)
-		error(0, errno, "inotify: %s", path);
+    *wd = inotify_add_watch(fd, path, mask);
+    if (*wd == -1)
+        error(0, errno, "inotify: %s", path);
 }
 
 static char *arl_scratch_push(const char *filepath, size_t len)
 {
-	if (scratch.len < len + 1) {
-		scratch.len = len + 1;
-		scratch.buf = erealloc(scratch.buf, scratch.len);
-	}
-	scratch.buf[len] = '\0';
-	return memcpy(scratch.buf, filepath, len);
+    if (scratch.len < len + 1) {
+        scratch.len = len + 1;
+        scratch.buf = erealloc(scratch.buf, scratch.len);
+    }
+    scratch.buf[len] = '\0';
+    return memcpy(scratch.buf, filepath, len);
 }
 
 void arl_add(arl_t *arl, const char *filepath)
 {
-	char *base, *dir;
+    char *base, *dir;
 
-	if (arl->fd == -1)
-		return;
+    if (arl->fd == -1)
+        return;
 
-	rm_watch(arl->fd, &arl->wd_dir);
-	rm_watch(arl->fd, &arl->wd_file);
-	add_watch(arl->fd, &arl->wd_file, filepath, IN_CLOSE_WRITE | IN_DELETE_SELF);
+    rm_watch(arl->fd, &arl->wd_dir);
+    rm_watch(arl->fd, &arl->wd_file);
+    add_watch(arl->fd, &arl->wd_file, filepath, IN_CLOSE_WRITE | IN_DELETE_SELF);
 
-	base = strrchr(filepath, '/');
-	assert(base != NULL && "filepath must be result of realpath(3)");
-	dir = arl_scratch_push(filepath, MAX(base - filepath, 1));
-	add_watch(arl->fd, &arl->wd_dir, dir, IN_CREATE | IN_MOVED_TO);
-	arl->filename = arl_scratch_push(base + 1, strlen(base + 1));
+    base = strrchr(filepath, '/');
+    assert(base != NULL && "filepath must be result of realpath(3)");
+    dir = arl_scratch_push(filepath, MAX(base - filepath, 1));
+    add_watch(arl->fd, &arl->wd_dir, dir, IN_CREATE | IN_MOVED_TO);
+    arl->filename = arl_scratch_push(base + 1, strlen(base + 1));
 }
 
 bool arl_handle(arl_t *arl)
 {
-	bool reload = false;
-	char *ptr;
-	const struct inotify_event *e;
-	/* inotify_event aligned buffer */
-	static union {
-		char d[4096];
-		struct inotify_event e;
-	} buf;
+    bool reload = false;
+    char *ptr;
+    const struct inotify_event *e;
+    /* inotify_event aligned buffer */
+    static union {
+        char d[4096];
+        struct inotify_event e;
+    } buf;
 
-	while (true) {
-		ssize_t len = read(arl->fd, buf.d, sizeof(buf.d));
+    while (true) {
+        ssize_t len = read(arl->fd, buf.d, sizeof(buf.d));
 
-		if (len == -1) {
-			if (errno == EINTR)
-				continue;
-			break;
-		}
-		for (ptr = buf.d; ptr < buf.d + len; ptr += sizeof(*e) + e->len) {
-			e = (const struct inotify_event *)ptr;
-			if (e->wd == arl->wd_file && (e->mask & IN_CLOSE_WRITE)) {
-				reload = true;
-			} else if (e->wd == arl->wd_file && (e->mask & IN_DELETE_SELF)) {
-				rm_watch(arl->fd, &arl->wd_file);
-			} else if (e->wd == arl->wd_dir && (e->mask & (IN_CREATE | IN_MOVED_TO))) {
-				if (STREQ(e->name, arl->filename))
-					reload = true;
-			}
-		}
-	}
-	return reload;
+        if (len == -1) {
+            if (errno == EINTR)
+                continue;
+            break;
+        }
+        for (ptr = buf.d; ptr < buf.d + len; ptr += sizeof(*e) + e->len) {
+            e = (const struct inotify_event *)ptr;
+            if (e->wd == arl->wd_file && (e->mask & IN_CLOSE_WRITE)) {
+                reload = true;
+            } else if (e->wd == arl->wd_file && (e->mask & IN_DELETE_SELF)) {
+                rm_watch(arl->fd, &arl->wd_file);
+            } else if (e->wd == arl->wd_dir && (e->mask & (IN_CREATE | IN_MOVED_TO))) {
+                if (STREQ(e->name, arl->filename))
+                    reload = true;
+            }
+        }
+    }
+    return reload;
 }
 
 #else
 
 void arl_init(arl_t *arl)
 {
-	arl->fd = -1;
+    arl->fd = -1;
 }
 
 void arl_cleanup(arl_t *arl)
 {
-	(void)arl;
+    (void)arl;
 }
 
 void arl_add(arl_t *arl, const char *filepath)
 {
-	(void)arl;
-	(void)filepath;
+    (void)arl;
+    (void)filepath;
 }
 
 bool arl_handle(arl_t *arl)
 {
-	(void)arl;
-	return false;
+    (void)arl;
+    return false;
 }
 
 #endif /* HAVE_INOTIFY */

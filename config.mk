@@ -16,7 +16,14 @@ HAVE_INOTIFY = $(OPT_DEP_DEFAULT)
 HAVE_LIBFONTS = $(OPT_DEP_DEFAULT)
 HAVE_LIBEXIF  = $(OPT_DEP_DEFAULT)
 
-warning_flags := -Wall -Wextra -Wno-unused-parameter -pedantic
+warning_flags := -Wall -Wextra -Wshadow \
+		 -Wredundant-decls -Wstrict-prototypes -Wold-style-definition \
+		 -Wformat=2 -Wwrite-strings -Wno-unused-parameter -Wnested-externs \
+		 -pedantic # -Wconversion
+
+ifeq ($(CC),gcc)
+    warning_flags += -Wjump-misses-init -Wlogical-op
+endif
 
 # CFLAGS, any additional compiler flags goes here
 CFLAGS = -I./include -std=c99 $(warning_flags) -O2 -DNDEBUG

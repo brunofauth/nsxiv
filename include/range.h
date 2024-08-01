@@ -5,8 +5,8 @@
 
 
 typedef struct {
-	int32_t start;
-	int32_t end;
+    int32_t start;
+    int32_t end;
 } IndexRange;
 
 IndexRange IndexRange_widen(IndexRange range, const int32_t ammount);
