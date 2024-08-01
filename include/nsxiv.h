@@ -21,7 +21,7 @@
 #define NSXIV_H
 
 #if !defined(DEBUG) && !defined(NDEBUG)
-	#define NDEBUG
+    #define NDEBUG
 #endif
 
 #include <stdbool.h>
@@ -47,86 +47,86 @@
 
 
 typedef enum {
-	MODE_ALL,
-	MODE_IMAGE,
-	MODE_THUMB
+    MODE_ALL,
+    MODE_IMAGE,
+    MODE_THUMB
 } appmode_t;
 
 typedef enum {
-	DIR_LEFT  = 1,
-	DIR_RIGHT = 2,
-	DIR_UP    = 4,
-	DIR_DOWN  = 8
+    DIR_LEFT  = 1,
+    DIR_RIGHT = 2,
+    DIR_UP    = 4,
+    DIR_DOWN  = 8
 } direction_t;
 
 typedef enum {
-	DEGREE_90  = 1,
-	DEGREE_180 = 2,
-	DEGREE_270 = 3
+    DEGREE_90  = 1,
+    DEGREE_180 = 2,
+    DEGREE_270 = 3
 } degree_t;
 
 typedef enum {
-	FLIP_HORIZONTAL = 1,
-	FLIP_VERTICAL   = 2
+    FLIP_HORIZONTAL = 1,
+    FLIP_VERTICAL   = 2
 } flipdir_t;
 
 typedef enum {
-	SCALE_DOWN,
-	SCALE_FIT,
-	SCALE_FILL,
-	SCALE_WIDTH,
-	SCALE_HEIGHT,
-	SCALE_ZOOM
+    SCALE_DOWN,
+    SCALE_FIT,
+    SCALE_FILL,
+    SCALE_WIDTH,
+    SCALE_HEIGHT,
+    SCALE_ZOOM
 } scalemode_t;
 
 typedef enum {
-	DRAG_RELATIVE,
-	DRAG_ABSOLUTE
+    DRAG_RELATIVE,
+    DRAG_ABSOLUTE
 } dragmode_t;
 
 typedef enum {
-	CURSOR_ARROW,
-	CURSOR_DRAG_ABSOLUTE,
-	CURSOR_DRAG_RELATIVE,
-	CURSOR_WATCH,
-	CURSOR_LEFT,
-	CURSOR_RIGHT,
-	CURSOR_NONE,
+    CURSOR_ARROW,
+    CURSOR_DRAG_ABSOLUTE,
+    CURSOR_DRAG_RELATIVE,
+    CURSOR_WATCH,
+    CURSOR_LEFT,
+    CURSOR_RIGHT,
+    CURSOR_NONE,
 
-	CURSOR_COUNT
+    CURSOR_COUNT
 } cursor_t;
 
 typedef enum {
-	FF_WARN    = 1,
-	FF_MARK    = 2,
-	FF_TN_IS_INIT = 4
+    FF_WARN    = 1,
+    FF_MARK    = 2,
+    FF_TN_IS_INIT = 4
 } fileflags_t;
 
 typedef enum {
-	RF_KEEP_ZOOM_LEVEL = 1,
-	RF_KEEP_MARK_COLOR_MOD = 2,
+    RF_KEEP_ZOOM_LEVEL = 1,
+    RF_KEEP_MARK_COLOR_MOD = 2,
 } replaceflags_t;
 
 enum {
-	MCM_R = 0,
-	MCM_G = 1,
-	MCM_B = 2,
-	MCM_A = 3,
+    MCM_R = 0,
+    MCM_G = 1,
+    MCM_B = 2,
+    MCM_A = 3,
 };
 
 typedef struct {
-	const char *name; /* as given by user */
-	const char *path; /* always absolute, result of realpath(3) */
-	fileflags_t flags;
+    const char *name; /* as given by user */
+    const char *path; /* always absolute, result of realpath(3) */
+    fileflags_t flags;
 } fileinfo_t;
 
 /* timeouts in milliseconds: */
 enum {
-	TO_AUTORELOAD    = 128,
-	TO_REDRAW_RESIZE = 75,
-	TO_REDRAW_THUMBS = 200,
-	TO_CURSOR_HIDE   = 1200,
-	TO_DOUBLE_CLICK  = 300
+    TO_AUTORELOAD    = 128,
+    TO_REDRAW_RESIZE = 75,
+    TO_REDRAW_THUMBS = 200,
+    TO_CURSOR_HIDE   = 1200,
+    TO_DOUBLE_CLICK  = 300
 };
 
 typedef void (*timeout_f)(void);
@@ -141,10 +141,10 @@ typedef struct win win_t;
 /* autoreload.c */
 
 struct arl {
-	int fd;
-	int wd_dir;
-	int wd_file;
-	const char *filename;
+    int fd;
+    int wd_dir;
+    int wd_file;
+    const char *filename;
 };
 
 void arl_init(arl_t*);
@@ -159,15 +159,15 @@ typedef int arg_t;
 typedef bool (*cmd_f)(arg_t);
 
 typedef struct {
-	cmd_f func;
-	appmode_t mode;
+    cmd_f func;
+    appmode_t mode;
 } cmd_t;
 
 typedef struct {
-	unsigned int mask;
-	KeySym ksym_or_button;
-	cmd_t cmd;
-	arg_t arg;
+    unsigned int mask;
+    KeySym ksym_or_button;
+    cmd_t cmd;
+    arg_t arg;
 } keymap_t;
 
 typedef keymap_t button_t;
@@ -176,58 +176,58 @@ typedef keymap_t button_t;
 /* image.c */
 
 #ifdef IMLIB2_VERSION /* UPGRADE: Imlib2 v1.8.0: remove all HAVE_IMLIB2_MULTI_FRAME ifdefs */
-	#if IMLIB2_VERSION >= IMLIB2_VERSION_(1, 8, 0)
-		#define HAVE_IMLIB2_MULTI_FRAME 1
-	#endif
+    #if IMLIB2_VERSION >= IMLIB2_VERSION_(1, 8, 0)
+        #define HAVE_IMLIB2_MULTI_FRAME 1
+    #endif
 #endif
 #ifndef HAVE_IMLIB2_MULTI_FRAME
-	#define HAVE_IMLIB2_MULTI_FRAME 0
+    #define HAVE_IMLIB2_MULTI_FRAME 0
 #endif
 
 typedef struct {
-	Imlib_Image im;
-	unsigned int delay;
+    Imlib_Image im;
+    unsigned int delay;
 } img_frame_t;
 
 typedef struct {
-	img_frame_t *frames;
-	unsigned int cap;
-	unsigned int cnt;
-	unsigned int sel;
-	bool animate;
-	int framedelay;
-	int length;
+    img_frame_t *frames;
+    unsigned int cap;
+    unsigned int cnt;
+    unsigned int sel;
+    bool animate;
+    int framedelay;
+    int length;
 } multi_img_t;
 
 struct img {
-	Imlib_Image im;
-	int w;
-	int h;
+    Imlib_Image im;
+    int w;
+    int h;
 
-	win_t *win;
-	float x;
-	float y;
+    win_t *win;
+    float x;
+    float y;
 
-	Imlib_Color_Modifier cmod;
-	int gamma;
-	int brightness;
-	int contrast;
+    Imlib_Color_Modifier cmod;
+    int gamma;
+    int brightness;
+    int contrast;
 
-	scalemode_t scalemode;
-	float zoom;
+    scalemode_t scalemode;
+    float zoom;
 
-	bool checkpan;
-	bool dirty;
-	bool anti_alias;
-	bool alpha_layer;
-	bool autoreload_pending;
+    bool checkpan;
+    bool dirty;
+    bool anti_alias;
+    bool alpha_layer;
+    bool autoreload_pending;
 
-	struct {
-		bool on;
-		int delay;
-	} ss;
+    struct {
+        bool on;
+        int delay;
+    } ss;
 
-	multi_img_t multi;
+    multi_img_t multi;
 };
 
 void img_init(img_t*, win_t*);
@@ -258,38 +258,38 @@ void exif_auto_orientate(const fileinfo_t*);
 /* options.c */
 
 struct opt {
-	/* file list: */
-	char **filenames;
-	bool from_stdin;
-	bool to_stdout;
-	bool using_null;
-	bool recursive;
-	int filecnt;
-	int startnum;
+    /* file list: */
+    char **filenames;
+    bool from_stdin;
+    bool to_stdout;
+    bool using_null;
+    bool recursive;
+    int filecnt;
+    int startnum;
 
-	/* image: */
-	scalemode_t scalemode;
-	float zoom;
-	bool animate;
-	bool anti_alias;
-	bool alpha_layer;
-	int gamma;
-	unsigned int slideshow;
-	int framerate;
+    /* image: */
+    scalemode_t scalemode;
+    float zoom;
+    bool animate;
+    bool anti_alias;
+    bool alpha_layer;
+    int gamma;
+    unsigned int slideshow;
+    int framerate;
 
-	/* window: */
-	bool fullscreen;
-	bool hide_bar;
-	Window embed;
-	char *geometry;
-	char *res_name;
+    /* window: */
+    bool fullscreen;
+    bool hide_bar;
+    Window embed;
+    char *geometry;
+    char *res_name;
 
-	/* misc flags: */
-	bool quiet;
-	bool thumb_mode;
-	bool clean_cache;
-	bool private_mode;
-	bool background_cache;
+    /* misc flags: */
+    bool quiet;
+    bool thumb_mode;
+    bool clean_cache;
+    bool private_mode;
+    bool background_cache;
 };
 
 extern const opt_t *options;
@@ -301,42 +301,42 @@ void parse_options(int, char**);
 /* thumbs.c */
 
 typedef struct {
-	Imlib_Image im;
-	int w;
-	int h;
-	int x;
-	int y;
+    Imlib_Image im;
+    int w;
+    int h;
+    int x;
+    int y;
         float scale;
 } thumb_t;
 
 typedef struct {
-	uint8_t r[256];
-	uint8_t g[256];
-	uint8_t b[256];
-	uint8_t a[256];
+    uint8_t r[256];
+    uint8_t g[256];
+    uint8_t b[256];
+    uint8_t a[256];
 } markcolormod_t;
 
 struct tns {
-	fileinfo_t *files;
-	thumb_t *thumbs;
-	const int *cnt;
-	int *sel;
-	int next_to_init;
-	int next_to_load_in_view;
+    fileinfo_t *files;
+    thumb_t *thumbs;
+    const int *cnt;
+    int *sel;
+    int next_to_init;
+    int next_to_load_in_view;
         IndexRange visible_thumbs;
         IndexRange loaded_thumbs;
 
-	win_t *win;
-	int x;
-	int y;
-	int cols;
-	int rows;
-	int zoom_level;
-	int border_width;
-	int dim;
-	markcolormod_t *mcm;
+    win_t *win;
+    int x;
+    int y;
+    int cols;
+    int rows;
+    int zoom_level;
+    int border_width;
+    int dim;
+    markcolormod_t *mcm;
 
-	bool dirty;
+    bool dirty;
 };
 
 void tns_clean_cache(void);
@@ -360,14 +360,14 @@ bool tns_toggle_squared(void);
 #include <dirent.h>
 
 typedef struct {
-	DIR *dir;
-	char *name;
-	int d;
-	bool recursive;
+    DIR *dir;
+    char *name;
+    int d;
+    bool recursive;
 
-	char **stack;
-	int stcap;
-	int stlen;
+    char **stack;
+    int stcap;
+    int stlen;
 } r_dir_t;
 
 extern const char *progname;
@@ -393,64 +393,64 @@ pid_t spawn(int*, int*, int, char *const []);
 #endif
 
 enum {
-	ATOM_WM_DELETE_WINDOW,
-	ATOM__NET_WM_NAME,
-	ATOM__NET_WM_ICON_NAME,
-	ATOM__NET_WM_ICON,
-	ATOM__NET_WM_STATE,
-	ATOM__NET_WM_PID,
-	ATOM__NET_WM_STATE_FULLSCREEN,
-	ATOM_UTF8_STRING,
-	ATOM_WM_NAME,
-	ATOM_WM_ICON_NAME,
-	ATOM_COUNT
+    ATOM_WM_DELETE_WINDOW,
+    ATOM__NET_WM_NAME,
+    ATOM__NET_WM_ICON_NAME,
+    ATOM__NET_WM_ICON,
+    ATOM__NET_WM_STATE,
+    ATOM__NET_WM_PID,
+    ATOM__NET_WM_STATE_FULLSCREEN,
+    ATOM_UTF8_STRING,
+    ATOM_WM_NAME,
+    ATOM_WM_ICON_NAME,
+    ATOM_COUNT
 };
 
 typedef struct {
-	Display *dpy;
-	int scr;
-	int scrw, scrh;
-	Visual *vis;
-	Colormap cmap;
-	int depth;
+    Display *dpy;
+    int scr;
+    int scrw, scrh;
+    Visual *vis;
+    Colormap cmap;
+    int depth;
 } win_env_t;
 
 typedef struct {
-	size_t size;
-	char *p;
-	char *buf;
+    size_t size;
+    char *p;
+    char *buf;
 } win_bar_t;
 
 struct win {
-	Window xwin;
-	win_env_t env;
+    Window xwin;
+    win_env_t env;
 
-	XColor win_bg;
-	XColor win_fg;
-	XColor tn_mark_fg;
+    XColor win_bg;
+    XColor win_fg;
+    XColor tn_mark_fg;
 #if HAVE_LIBFONTS
-	XftColor bar_bg;
-	XftColor bar_fg;
+    XftColor bar_bg;
+    XftColor bar_fg;
 #endif
 
-	int x;
-	int y;
-	unsigned int w;
-	unsigned int h; /* = win height - bar height */
-	unsigned int bw;
+    int x;
+    int y;
+    unsigned int w;
+    unsigned int h; /* = win height - bar height */
+    unsigned int bw;
 
-	struct {
-		unsigned int w;
-		unsigned int h;
-		Pixmap pm;
-	} buf;
+    struct {
+        unsigned int w;
+        unsigned int h;
+        Pixmap pm;
+    } buf;
 
-	struct {
-		unsigned int h;
-		bool top;
-		win_bar_t l;
-		win_bar_t r;
-	} bar;
+    struct {
+        unsigned int h;
+        bool top;
+        win_bar_t l;
+        win_bar_t r;
+    } bar;
 };
 
 extern Atom atoms[ATOM_COUNT];
