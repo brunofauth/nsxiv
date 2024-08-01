@@ -1,4 +1,3 @@
-// vim: noexpandtab shiftwidth=8
 /* Copyright 2011-2020 Bert Muennich
  * Copyright 2021-2023 nsxiv contributors
  *
@@ -775,21 +774,18 @@ static void on_buttonpress(const XButtonEvent *bev)
 
 static void run(void)
 {
-    enum { FD_X, FD_INFO, FD_TITLE, FD_ARL, FD_CNT };
-    struct pollfd pfd[FD_CNT];
-    int timeout = 0;
-    bool discard, init_thumb, load_thumb, to_set;
-    XEvent ev, nextev;
-
+    int32_t timeout = 0;
+    XEvent ev;
     xbutton_ev = &ev.xbutton;
-    while (true) {
-        to_set = check_timeouts(&timeout);
-        init_thumb = mode == MODE_THUMB && tns.next_to_init < filecnt;
-        load_thumb = mode == MODE_THUMB && tns.next_to_load_in_view < tns.visible_thumbs.end;
 
-                // "Only do heavy processing while there are no events to process"
-                if (XPending(win.env.dpy) == 0) {
-            if (load_thumb) {
+    while (true) {
+        bool to_set = check_timeouts(&timeout);
+        bool should_init_thumb = mode == MODE_THUMB && tns.next_to_init < filecnt;
+        bool should_load_thumb = mode == MODE_THUMB && tns.next_to_load_in_view < tns.visible_thumbs.end;
+
+        // "Only do heavy processing while there are no events to process"
+        if (XPending(win.env.dpy) == 0) {
+            if (should_load_thumb) {
                 set_timeout(redraw, TO_REDRAW_THUMBS, false);
                 if (!tns_load(&tns, tns.next_to_load_in_view, false, false)) {
                     remove_file(tns.next_to_load_in_view, false);
@@ -799,15 +795,19 @@ static void run(void)
                     open_info();
                     redraw();
                 }
-                                continue;
+                continue;
             }
-                        if (init_thumb) {
+            if (should_init_thumb) {
                 set_timeout(redraw, TO_REDRAW_THUMBS, false);
                 if (!tns_load(&tns, tns.next_to_init, false, true))
                     remove_file(tns.next_to_init, false);
-                                continue;
+                continue;
             }
-                        if (to_set || info.fd != -1 || arl.fd != -1) {
+            if (to_set || info.fd != -1 || arl.fd != -1) {
+                enum { FD_X, FD_INFO, FD_TITLE, FD_ARL, FD_CNT };
+                // This needs to be reinitialized in every loop... might as well declare it here
+                struct pollfd pfd[FD_CNT];
+
                 pfd[FD_X].fd = ConnectionNumber(win.env.dpy);
                 pfd[FD_INFO].fd = info.fd;
                 pfd[FD_TITLE].fd = wintitle.fd;
@@ -826,14 +826,16 @@ static void run(void)
                     img.autoreload_pending = true;
                     set_timeout(autoreload, TO_AUTORELOAD, true);
                 }
-                                continue;
+                continue;
             }
         }
 
+        bool discard;
         do {
             XNextEvent(win.env.dpy, &ev);
             discard = false;
             if (XEventsQueued(win.env.dpy, QueuedAlready) > 0) {
+                XEvent nextev;
                 XPeekEvent(win.env.dpy, &nextev);
                 switch (ev.type) {
                 case ConfigureNotify:
@@ -887,7 +889,6 @@ static void run(void)
             break;
         }
     }
-    printf("=========================================================================================###################################################################################\n");
 }
 
 static void setup_signal(int sig, void (*handler)(int sig), int flags)

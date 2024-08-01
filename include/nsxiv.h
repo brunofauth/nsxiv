@@ -340,18 +340,20 @@ struct tns {
 };
 
 void tns_clean_cache(void);
-void tns_init(tns_t*, fileinfo_t*, const int*, int*, win_t*);
+void tns_init(
+        tns_t*, fileinfo_t*, const int* thumbnail_count, int* selected_thumbnail, win_t*);
+CLEANUP void tns_replace(
+        tns_t*, fileinfo_t*, const int* thumbnail_count, int* selected_thumbnail, win_t*, replaceflags_t);
 CLEANUP void tns_free(tns_t*);
-CLEANUP void tns_replace(tns_t*, fileinfo_t*, const int*, int*, win_t*, replaceflags_t);
-bool tns_load(tns_t*, int, bool force, bool cache_only);
-void tns_unload(tns_t*, int);
+bool tns_load(tns_t*, int thumbnail_index, bool force, bool cache_only);
+void tns_unload(tns_t*, int thumbnail_index);
 void tns_render(tns_t*);
-void tns_mark(tns_t*, int, bool);
-void tns_highlight(tns_t*, int, bool);
-bool tns_move_selection(tns_t*, direction_t, int);
-bool tns_scroll(tns_t*, direction_t, bool);
-bool tns_zoom(tns_t*, int);
-int tns_translate(tns_t*, int, int);
+void tns_mark(tns_t*, int thumbnail_index, bool should_mark);
+void tns_highlight(tns_t*, int thumbnail_index, bool should_highlight);
+bool tns_move_selection(tns_t*, direction_t, int grid_distance);
+bool tns_scroll(tns_t*, direction_t, bool whole_screen);
+bool tns_zoom(tns_t*, int zoom_level_index);
+int tns_translate(tns_t*, int grid_x, int grid_y);
 bool tns_toggle_squared(void);
 
 
