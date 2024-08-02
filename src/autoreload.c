@@ -33,7 +33,7 @@ static struct {
     size_t len;
 } scratch;
 
-void arl_init(arl_t *arl)
+void autoreload_init(arl_t *arl)
 {
     arl->fd = inotify_init1(IN_CLOEXEC | IN_NONBLOCK);
     arl->wd_dir = arl->wd_file = -1;
@@ -41,7 +41,7 @@ void arl_init(arl_t *arl)
         error(0, 0, "Could not initialize inotify, no automatic image reloading");
 }
 
-CLEANUP void arl_cleanup(arl_t *arl)
+CLEANUP void autoreload_cleanup(arl_t *arl)
 {
     if (arl->fd != -1)
         close(arl->fd);
@@ -73,7 +73,7 @@ static char *arl_scratch_push(const char *filepath, size_t len)
     return memcpy(scratch.buf, filepath, len);
 }
 
-void arl_add(arl_t *arl, const char *filepath)
+void autoreload_add(arl_t *arl, const char *filepath)
 {
     if (arl->fd == -1)
         return;
@@ -89,7 +89,7 @@ void arl_add(arl_t *arl, const char *filepath)
     arl->filename = arl_scratch_push(base + 1, strlen(base + 1));
 }
 
-bool arl_handle(arl_t *arl)
+bool autoreload_handle_events(arl_t *arl)
 {
     bool reload = false;
     const struct inotify_event *inotify_event;

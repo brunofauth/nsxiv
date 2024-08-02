@@ -72,7 +72,7 @@ void error(int eval, int err, const char *fmt, ...)
     va_list ap;
 
     if (eval == 0 && options->quiet)
-        return;
+        exit(eval);
 
     fflush(stdout);
     fprintf(stderr, "%s: ", progname);
@@ -88,7 +88,7 @@ void error(int eval, int err, const char *fmt, ...)
         exit(eval);
 }
 
-int r_opendir(r_dir_t *rdir, const char *dirname, bool recursive)
+int r_opendir(r_dir_t *rdir, const char dirname[], bool recursive)
 {
     if (*dirname == '\0')
         return -1;

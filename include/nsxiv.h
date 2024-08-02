@@ -1,3 +1,4 @@
+// vim: foldmethod=marker foldlevel=0
 /* Copyright 2011-2020 Bert Muennich
  * Copyright 2021-2023 nsxiv contributors
  *
@@ -138,7 +139,7 @@ typedef struct tns tns_t;
 typedef struct win win_t;
 
 
-/* autoreload.c */
+// autoreload.c {{{
 
 struct arl {
     int fd;
@@ -147,13 +148,15 @@ struct arl {
     const char *filename;
 };
 
-void arl_init(arl_t*);
-void arl_cleanup(arl_t*);
-void arl_add(arl_t*, const char* /* result of realpath(3) */);
-bool arl_handle(arl_t*);
+void autoreload_init(arl_t*);
+void autoreload_cleanup(arl_t*);
+void autoreload_add(arl_t*, const char* /* result of realpath(3) */);
+bool autoreload_handle_events(arl_t*);
+
+// }}}
 
 
-/* commands.c */
+// commands.c {{{
 
 typedef int arg_t;
 typedef bool (*cmd_f)(arg_t);
@@ -172,8 +175,10 @@ typedef struct {
 
 typedef keymap_t button_t;
 
+// }}}
 
-/* image.c */
+
+// image.c {{{
 
 #ifdef IMLIB2_VERSION /* UPGRADE: Imlib2 v1.8.0: remove all HAVE_IMLIB2_MULTI_FRAME ifdefs */
     #if IMLIB2_VERSION >= IMLIB2_VERSION_(1, 8, 0)
@@ -230,32 +235,74 @@ struct img {
     multi_img_t multi;
 };
 
-void img_init(img_t*, win_t*);
-bool img_load(img_t*, const fileinfo_t*);
-CLEANUP void img_free(Imlib_Image, bool);
-CLEANUP void img_close(img_t*, bool);
-void img_render(img_t*);
-bool img_fit_win(img_t*, scalemode_t);
-bool img_zoom(img_t*, int);
-bool img_zoom_to(img_t*, float);
-bool img_pos(img_t*, float, float);
-bool img_pan(img_t*, direction_t, int);
-bool img_pan_center(img_t*);
-bool img_pan_edge(img_t*, direction_t);
-void img_rotate(img_t*, degree_t);
-void img_flip(img_t*, flipdir_t);
-void img_toggle_antialias(img_t*);
-void img_update_color_modifiers(img_t*);
-bool img_change_color_modifier(img_t*, int, int*);
-bool img_frame_navigate(img_t*, int);
-bool img_frame_animate(img_t*);
-Imlib_Image img_open(const fileinfo_t*);
+void img_init(img_t*, win_t*)
+    __attribute__((nonnull(1)));
+
+bool img_load(img_t*, const fileinfo_t*)
+    __attribute__((nonnull(1)));
+
+CLEANUP void img_free(Imlib_Image, const bool decache);
+
+CLEANUP void img_close(img_t*, const bool decache)
+    __attribute__((nonnull(1)));
+
+void img_render(img_t*)
+    __attribute__((nonnull(1)));
+
+bool img_fit_win(img_t*, scalemode_t)
+    __attribute__((nonnull(1)));
+
+bool img_zoom(img_t*, int)
+    __attribute__((nonnull(1)));
+
+bool img_zoom_to(img_t*, float)
+    __attribute__((nonnull(1)));
+
+bool img_pos(img_t*, float, float)
+    __attribute__((nonnull(1)));
+
+bool img_pan(img_t*, direction_t, int)
+    __attribute__((nonnull(1)));
+
+bool img_pan_center(img_t*)
+    __attribute__((nonnull(1)));
+
+bool img_pan_edge(img_t*, direction_t)
+    __attribute__((nonnull(1)));
+
+void img_rotate(img_t*, degree_t)
+    __attribute__((nonnull(1)));
+
+void img_flip(img_t*, flipdir_t)
+    __attribute__((nonnull(1)));
+
+void img_toggle_antialias(img_t*)
+    __attribute__((nonnull(1)));
+
+void img_update_color_modifiers(img_t*)
+    __attribute__((nonnull(1)));
+
+bool img_change_color_modifier(img_t*, int, int*)
+    __attribute__((nonnull(1)));
+
+bool img_frame_navigate(img_t*, int)
+    __attribute__((nonnull(1)));
+
+bool img_frame_animate(img_t*)
+    __attribute__((nonnull(1)));
+
+Imlib_Image img_open(const fileinfo_t*)
+    __attribute__((nonnull(1)));
+
 #if HAVE_LIBEXIF
-void exif_auto_orientate(const fileinfo_t*);
+void exif_auto_orientate(const fileinfo_t*)
+    __attribute__((nonnull(1)));
 #endif
 
+// }}}
 
-/* options.c */
+
+// options.c {{{
 
 struct opt {
     /* file list: */
@@ -297,8 +344,10 @@ extern const opt_t *options;
 void print_usage(void);
 void parse_options(int, char**);
 
+// }}}
 
-/* thumbs.c */
+
+// thumbs.c {{{
 
 typedef struct {
     Imlib_Image im;
@@ -323,8 +372,8 @@ struct tns {
     int *sel;
     int next_to_init;
     int next_to_load_in_view;
-        IndexRange visible_thumbs;
-        IndexRange loaded_thumbs;
+    IndexRange visible_thumbs;
+    IndexRange loaded_thumbs;
 
     win_t *win;
     int x;
@@ -339,25 +388,61 @@ struct tns {
     bool dirty;
 };
 
-void tns_clean_cache(void);
 void tns_init(
-        tns_t*, fileinfo_t*, const int* thumbnail_count, int* selected_thumbnail, win_t*);
+    tns_t*,
+    fileinfo_t*,
+    const int* thumbnail_count,
+    int* selected_thumbnail,
+    win_t* window
+) __attribute__((nonnull(1)));
+
 CLEANUP void tns_replace(
-        tns_t*, fileinfo_t*, const int* thumbnail_count, int* selected_thumbnail, win_t*, replaceflags_t);
-CLEANUP void tns_free(tns_t*);
-bool tns_load(tns_t*, int thumbnail_index, bool force, bool cache_only);
-void tns_unload(tns_t*, int thumbnail_index);
-void tns_render(tns_t*);
-void tns_mark(tns_t*, int thumbnail_index, bool should_mark);
-void tns_highlight(tns_t*, int thumbnail_index, bool should_highlight);
-bool tns_move_selection(tns_t*, direction_t, int grid_distance);
-bool tns_scroll(tns_t*, direction_t, bool whole_screen);
-bool tns_zoom(tns_t*, int zoom_level_index);
-int tns_translate(tns_t*, int grid_x, int grid_y);
+    tns_t*,
+    fileinfo_t*,
+    const int* thumbnail_count,
+    int* selected_thumbnail,
+    win_t* window,
+    replaceflags_t flags
+) __attribute__((nonnull(1)));
+
+void tns_clean_cache(void);
+
+CLEANUP void tns_free(tns_t*)
+    __attribute__((nonnull(1)));
+
+bool tns_load(tns_t*, int thumbnail_index, bool force, bool cache_only)
+    __attribute__((nonnull(1)));
+
+void tns_unload(tns_t*, int thumbnail_index)
+    __attribute__((nonnull(1)));
+
+void tns_render(tns_t*)
+    __attribute__((nonnull(1)));
+
+void tns_mark(tns_t*, int thumbnail_index, bool should_mark)
+    __attribute__((nonnull(1)));
+
+void tns_highlight(tns_t*, int thumbnail_index, bool should_highlight)
+    __attribute__((nonnull(1)));
+
+bool tns_move_selection(tns_t*, direction_t, int grid_distance)
+    __attribute__((nonnull(1)));
+
+bool tns_scroll(tns_t*, direction_t, bool whole_screen)
+    __attribute__((nonnull(1)));
+
+bool tns_zoom(tns_t*, int zoom_level_index)
+    __attribute__((nonnull(1)));
+
+int tns_translate(tns_t*, int grid_x, int grid_y)
+    __attribute__((nonnull(1)));
+
 bool tns_toggle_squared(void);
 
+// }}}
 
-/* util.c */
+
+// util.c {{{
 
 #include <dirent.h>
 
@@ -379,15 +464,17 @@ void* ecalloc(size_t, size_t);
 void* erealloc(void*, size_t);
 char* estrdup(const char*);
 void error(int, int, const char*, ...);
-int r_opendir(r_dir_t*, const char*, bool);
-int r_closedir(r_dir_t*);
-char* r_readdir(r_dir_t*, bool);
-int r_mkdir(char*);
+int r_opendir(r_dir_t*, const char dirname[], bool recursive) __attribute__((nonnull (1, 2)));
+int r_closedir(r_dir_t*)                                      __attribute__((nonnull (1)));
+char* r_readdir(r_dir_t*, bool skip_dotfiles)                 __attribute__((nonnull (1)));
+int r_mkdir(char*)                                            __attribute__((nonnull (1)));
 void construct_argv(char**, unsigned int, ...);
 pid_t spawn(int*, int*, int, char *const []);
 
+// }}}
 
-/* window.c */
+
+// window.c {{{
 
 #include <X11/Xutil.h>
 #if HAVE_LIBFONTS
@@ -470,7 +557,10 @@ void win_set_title(win_t*, const char *title, size_t length);
 void win_set_cursor(win_t*, cursor_t);
 void win_cursor_pos(win_t*, int *x, int *y);
 
-/* main.c */
+// }}}
+
+
+// main.c {{{
 
 /* timeout handler functions: */
 void redraw(void);
@@ -489,13 +579,16 @@ bool mark_image(int, bool);
 int nav_button(void);
 void handle_key_handler(bool);
 
-extern appmode_t mode;
-extern const XButtonEvent *xbutton_ev;
-extern fileinfo_t *files;
-extern int filecnt, fileidx;
-extern int alternate;
-extern int markcnt;
-extern int markidx;
-extern int prefix;
+extern appmode_t g_mode;
+extern const XButtonEvent *g_xbutton_ev;
+extern fileinfo_t *g_files;
+extern int g_filecnt;
+extern int g_fileidx;
+extern int g_alternate;
+extern int g_markcnt;
+extern int g_markidx;
+extern int g_prefix;
+
+// }}}
 
 #endif /* NSXIV_H */

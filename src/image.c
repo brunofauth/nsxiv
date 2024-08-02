@@ -50,6 +50,7 @@ static int calc_cache_size(void)
     pages = sysconf(_SC_PHYS_PAGES);
     page_size = sysconf(_SC_PAGE_SIZE);
 #endif
+    // cppcheck-suppress knownConditionTrueFalse
     if (pages < 0 || page_size < 0)
         return CACHE_SIZE_FALLBACK;
     cache = (pages / 100) * CACHE_SIZE_MEM_PERCENTAGE;
@@ -323,7 +324,7 @@ bool img_load(img_t *img, const fileinfo_t *file)
     return true;
 }
 
-CLEANUP void img_free(Imlib_Image im, bool decache)
+CLEANUP void img_free(Imlib_Image im, const bool decache)
 {
     if (im != NULL) {
         imlib_context_set_image(im);
@@ -331,7 +332,7 @@ CLEANUP void img_free(Imlib_Image im, bool decache)
     }
 }
 
-CLEANUP void img_close(img_t *img, bool decache)
+CLEANUP void img_close(img_t *img, const bool decache)
 {
     unsigned int i;
 
@@ -345,7 +346,7 @@ CLEANUP void img_close(img_t *img, bool decache)
 #if HAVE_IMLIB2_MULTI_FRAME
     #if IMLIB2_VERSION >= IMLIB2_VERSION_(1, 12, 0)
         if (decache)
-            imlib_image_decache_file(files[fileidx].path);
+            imlib_image_decache_file(g_files[g_fileidx].path);
     #else /* UPGRADE: Imlib2 v1.12.0: remove this hack */
         /* HACK: try to reload all the frames and forcefully decache them
          * if imlib_image_decache_file() isn't available.
@@ -362,16 +363,13 @@ CLEANUP void img_close(img_t *img, bool decache)
     }
 }
 
-static void img_check_pan(img_t *img, bool moved)
+static void img_check_pan(img_t *img, const bool moved)
 {
-    win_t *win;
-    float w, h, ox, oy;
-
-    win = img->win;
-    w = img->w * img->zoom;
-    h = img->h * img->zoom;
-    ox = img->x;
-    oy = img->y;
+    const win_t *win = img->win;
+    const float w = img->w * img->zoom;
+    const float h = img->h * img->zoom;
+    const float ox = img->x;
+    const float oy = img->y;
 
     if (w < win->w)
         img->x = (win->w - w) / 2;
@@ -379,6 +377,7 @@ static void img_check_pan(img_t *img, bool moved)
         img->x = 0;
     else if (img->x + w < win->w)
         img->x = win->w - w;
+
     if (h < win->h)
         img->y = (win->h - h) / 2;
     else if (img->y > 0)
@@ -427,12 +426,6 @@ static bool img_fit(img_t *img)
 
 void img_render(img_t *img)
 {
-    win_t *win;
-    int sx, sy, sw, sh;
-    int dx, dy, dw, dh;
-    Imlib_Image bg;
-
-    win = img->win;
     img_fit(img);
 
     if (img->checkpan) {
@@ -443,10 +436,12 @@ void img_render(img_t *img)
     if (!img->dirty)
         return;
 
+    win_t *win = img->win;
     /* calculate source and destination offsets:
      *   - part of image drawn on full window, or
      *   - full image drawn on part of window
      */
+    int sx, sw, dx, dw;
     if (img->x <= 0) {
         sx = -img->x / img->zoom + 0.5;
         sw = win->w / img->zoom;
@@ -458,6 +453,8 @@ void img_render(img_t *img)
         dx = img->x;
         dw = MAX(img->w * img->zoom, 1);
     }
+
+    int sy, sh, dy, dh;
     if (img->y <= 0) {
         sy = -img->y / img->zoom + 0.5;
         sh = win->h / img->zoom;
@@ -480,7 +477,8 @@ void img_render(img_t *img)
      * see https://phab.enlightenment.org/T8969#156167 for more details.
      */
     if (imlib_image_has_alpha()) {
-        if ((bg = imlib_create_image(dw, dh)) == NULL) {
+        Imlib_Image bg = imlib_create_image(dw, dh);
+        if (bg == NULL) {
             error(0, ENOMEM, "Failed to create image");
             goto fallback;
         }

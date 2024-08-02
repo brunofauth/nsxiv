@@ -453,7 +453,7 @@ static void win_draw_bar(win_t *win)
     win_env_t *window_env = &win->env;
     win_bar_t *bar_l = &win->bar.l;
     win_bar_t *bar_r = &win->bar.r;
-    assert(l->buf != NULL && r->buf != NULL);
+    assert(bar_l->buf != NULL && bar_r->buf != NULL);
 
     int y = (win->bar.top ? 0 : win->h) + font->ascent + V_TEXT_PAD;
     int w = win->w - 2 * H_TEXT_PAD;
