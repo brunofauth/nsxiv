@@ -72,7 +72,7 @@ void error(int eval, int err, const char *fmt, ...)
     va_list ap;
 
     if (eval == 0 && options->quiet)
-        return;
+        exit(eval);
 
     fflush(stdout);
     fprintf(stderr, "%s: ", progname);
@@ -88,7 +88,7 @@ void error(int eval, int err, const char *fmt, ...)
         exit(eval);
 }
 
-int r_opendir(r_dir_t *rdir, const char *dirname, bool recursive)
+int r_opendir(r_dir_t *rdir, const char dirname[], bool recursive)
 {
     if (*dirname == '\0')
         return -1;
@@ -136,12 +136,8 @@ int r_closedir(r_dir_t *rdir)
 
 char *r_readdir(r_dir_t *rdir, bool skip_dotfiles)
 {
-    size_t len;
-    char *filename;
-    struct dirent *dentry;
-    struct stat fstats;
-
     while (true) {
+        const struct dirent *dentry;
         if (rdir->dir != NULL && (dentry = readdir(rdir->dir)) != NULL) {
             if (dentry->d_name[0] == '.') {
                 if (skip_dotfiles)
@@ -152,12 +148,13 @@ char *r_readdir(r_dir_t *rdir, bool skip_dotfiles)
                     continue;
             }
 
-            len = strlen(rdir->name) + strlen(dentry->d_name) + 2;
-            filename = emalloc(len);
+            size_t len = strlen(rdir->name) + strlen(dentry->d_name) + 2;
+            char *filename = emalloc(len);
             snprintf(filename, len, "%s%s%s", rdir->name,
                      rdir->name[strlen(rdir->name) - 1] == '/' ? "" : "/",
                      dentry->d_name);
 
+            struct stat fstats;
             if (stat(filename, &fstats) < 0) {
                 free(filename);
                 continue;

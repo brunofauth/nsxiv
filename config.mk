@@ -25,11 +25,14 @@ ifeq ($(CC),gcc)
     warning_flags += -Wjump-misses-init -Wlogical-op
 endif
 
+analyzer_flags := -fanalyzer
+
 # CFLAGS, any additional compiler flags goes here
-CFLAGS = -I./include -std=c99 $(warning_flags) -O2 -DNDEBUG
+# CFLAGS = -I./include -std=c99 $(warning_flags) -O2 -DNDEBUG
 # Uncomment for a debug build using gcc/clang
-# CFLAGS = -I./include -std=c99 $(warning_flags) -DDEBUG -g3 -fsanitize=address,undefined
-# LDFLAGS = $(CFLAGS)
+CFLAGS = -I./include -std=c99 $(warning_flags) $(analyzer_flags) -DDEBUG -g3 \
+	 -fsanitize=address,undefined
+LDFLAGS = -fsanitize=address,undefined
 
 # icons that will be installed via `make icon`
 ICONS = 16x16.png 32x32.png 48x48.png 64x64.png 128x128.png
@@ -40,5 +43,5 @@ ICONS = 16x16.png 32x32.png 48x48.png 64x64.png 128x128.png
 # lib_fonts_bsd_1 = -lfreetype -L/usr/X11R6/lib/freetype2
 # inc_fonts_bsd_0 =
 # inc_fonts_bsd_1 = -I/usr/X11R6/include/freetype2
-# CPPFLAGS = -I/usr/X11R6/include -I/usr/local/include $(inc_fonts_bsd_$(HAVE_LIBFONTS))
+# CFLAGS = -I/usr/X11R6/include -I/usr/local/include $(inc_fonts_bsd_$(HAVE_LIBFONTS))
 # LDLIBS = -L/usr/X11R6/lib -L/usr/local/lib $(lib_fonts_bsd_$(HAVE_LIBFONTS))

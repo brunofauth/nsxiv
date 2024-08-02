@@ -1,4 +1,3 @@
-// vim: noexpandtab shiftwidth=8
 /* Copyright 2011-2020 Bert Muennich
  * Copyright 2021-2023 nsxiv contributors
  *
@@ -48,8 +47,8 @@
 
 #define TV_DIFF(t1,t2) (((t1)->tv_sec  - (t2)->tv_sec ) * 1000 + \
                         ((t1)->tv_usec - (t2)->tv_usec) / 1000)
-#define TV_ADD_MSEC(tv, t)                          \
-    do {                                        \
+#define TV_ADD_MSEC(tv, t)                  \
+    do {                                    \
         (tv)->tv_sec  += (t) / 1000;        \
         (tv)->tv_usec += (t) % 1000 * 1000; \
     } while (0)
@@ -60,19 +59,19 @@ typedef struct {
 } extcmd_t;
 
 /* these are not declared in nsxiv.h, as it causes too many -Wshadow warnings */
-arl_t arl;
-img_t img;
-tns_t tns;
-win_t win;
+arl_t g_state_autoreload;
+img_t g_img;
+tns_t g_tns;
+win_t g_win;
 
-appmode_t mode;
-fileinfo_t *files;
-int filecnt, fileidx;
-int alternate;
-int markcnt;
-int markidx;
-int prefix;
-const XButtonEvent *xbutton_ev;
+appmode_t g_mode;
+fileinfo_t *g_files;
+int g_filecnt, g_fileidx;
+int g_alternate;
+int g_markcnt;
+int g_markidx;
+int g_prefix;
+const XButtonEvent *g_xbutton_ev;
 
 static void autoreload(void);
 
@@ -109,10 +108,10 @@ static struct {
 
 static void cleanup(void)
 {
-    img_close(&img, false);
-    arl_cleanup(&arl);
-    tns_free(&tns);
-    win_close(&win);
+    img_close(&g_img, false);
+    autoreload_cleanup(&g_state_autoreload);
+    tns_free(&g_tns);
+    win_close(&g_win);
 }
 
 static bool xgetline(char **lineptr, size_t *n)
@@ -143,17 +142,17 @@ static void check_add_file(const char *filename, bool given)
         return;
     }
 
-    if (fileidx == filecnt) {
-        filecnt *= 2;
-        files = erealloc(files, filecnt * sizeof(*files));
-        memset(&files[filecnt / 2], 0, filecnt / 2 * sizeof(*files));
+    if (g_fileidx == g_filecnt) {
+        g_filecnt *= 2;
+        g_files = erealloc(g_files, g_filecnt * sizeof(*g_files));
+        memset(&g_files[g_filecnt / 2], 0, g_filecnt / 2 * sizeof(*g_files));
     }
 
-    files[fileidx].name = estrdup(filename);
-    files[fileidx].path = path;
+    g_files[g_fileidx].name = estrdup(filename);
+    g_files[g_fileidx].path = path;
     if (given)
-        files[fileidx].flags |= FF_WARN;
-    fileidx++;
+        g_files[g_fileidx].flags |= FF_WARN;
+    g_fileidx++;
 }
 
 static void add_entry(const char *entry_name)
@@ -174,51 +173,51 @@ static void add_entry(const char *entry_name)
             error(0, errno, "%s", entry_name);
             return;
         }
-        start = fileidx;
+        start = g_fileidx;
         while ((filename = r_readdir(&dir, true)) != NULL) {
             check_add_file(filename, false);
             free(filename);
         }
         r_closedir(&dir);
-        if (fileidx - start > 1)
-            qsort(files + start, fileidx - start, sizeof(*files), fncmp);
+        if (g_fileidx - start > 1)
+            qsort(g_files + start, g_fileidx - start, sizeof(*g_files), fncmp);
     }
 }
 
 void remove_file(int n, bool manual)
 {
-    if (n < 0 || n >= filecnt)
+    if (n < 0 || n >= g_filecnt)
         return;
 
-    if (filecnt == 1) {
+    if (g_filecnt == 1) {
         if (!manual)
             fprintf(stderr, "%s: no more files to display, aborting\n", progname);
         exit(manual ? EXIT_SUCCESS : EXIT_FAILURE);
     }
-    if (files[n].flags & FF_MARK)
-        markcnt--;
+    if (g_files[n].flags & FF_MARK)
+        g_markcnt--;
 
-    if (files[n].path != files[n].name)
-        free((void *)files[n].path);
-    free((void *)files[n].name);
-    if (tns.thumbs != NULL)
-        tns_unload(&tns, n);
+    if (g_files[n].path != g_files[n].name)
+        free((void *)g_files[n].path);
+    free((void *)g_files[n].name);
+    if (g_tns.thumbs != NULL)
+        tns_unload(&g_tns, n);
 
-    if (n + 1 < filecnt) {
-        if (tns.thumbs != NULL) {
-            memmove(tns.thumbs + n, tns.thumbs + n + 1,
-                    (filecnt - n - 1) * sizeof(*tns.thumbs));
-            memset(tns.thumbs + filecnt - 1, 0, sizeof(*tns.thumbs));
+    if (n + 1 < g_filecnt) {
+        if (g_tns.thumbs != NULL) {
+            memmove(g_tns.thumbs + n, g_tns.thumbs + n + 1,
+                    (g_filecnt - n - 1) * sizeof(*g_tns.thumbs));
+            memset(g_tns.thumbs + g_filecnt - 1, 0, sizeof(*g_tns.thumbs));
         }
-        memmove(files + n, files + n + 1, (filecnt - n - 1) * sizeof(*files));
+        memmove(g_files + n, g_files + n + 1, (g_filecnt - n - 1) * sizeof(*g_files));
     }
-    filecnt--;
-    if (fileidx > n || fileidx == filecnt)
-        fileidx--;
-    if (alternate > n || alternate == filecnt)
-        alternate--;
-    if (markidx > n || markidx == filecnt)
-        markidx--;
+    g_filecnt--;
+    if (g_fileidx > n || g_fileidx == g_filecnt)
+        g_fileidx--;
+    if (g_alternate > n || g_alternate == g_filecnt)
+        g_alternate--;
+    if (g_markidx > n || g_markidx == g_filecnt)
+        g_markidx--;
 }
 
 void set_timeout(timeout_f handler, int time, bool overwrite)
@@ -286,10 +285,10 @@ static bool check_timeouts(int *t)
 
 static void autoreload(void)
 {
-    if (img.autoreload_pending) {
-        img_close(&img, true);
+    if (g_img.autoreload_pending) {
+        img_close(&g_img, true);
         /* load_image() sets autoreload_pending to false */
-        load_image(fileidx);
+        load_image(g_fileidx);
         redraw();
     } else {
         assert(!"unreachable");
@@ -317,7 +316,7 @@ static void read_title(void)
 
     if ((n = read(wintitle.fd, buf, sizeof(buf) - 1)) > 0) {
         buf[n] = '\0';
-        win_set_title(&win, buf, n);
+        win_set_title(&g_win, buf, n);
     }
     close_title();
 }
@@ -331,14 +330,14 @@ static void open_title(void)
         return;
 
     close_title();
-    if (mode == MODE_IMAGE) {
-        snprintf(w, ARRLEN(w), "%d", img.w);
-        snprintf(h, ARRLEN(h), "%d", img.h);
-        snprintf(z, ARRLEN(z), "%d", (int)(img.zoom * 100));
+    if (g_mode == MODE_IMAGE) {
+        snprintf(w, ARRLEN(w), "%d", g_img.w);
+        snprintf(h, ARRLEN(h), "%d", g_img.h);
+        snprintf(z, ARRLEN(z), "%d", (int)(g_img.zoom * 100));
     }
-    snprintf(fidx, ARRLEN(fidx), "%d", fileidx + 1);
-    snprintf(fcnt, ARRLEN(fcnt), "%d", filecnt);
-    construct_argv(argv, ARRLEN(argv), wintitle.f.cmd, files[fileidx].path,
+    snprintf(fidx, ARRLEN(fidx), "%d", g_fileidx + 1);
+    snprintf(fcnt, ARRLEN(fcnt), "%d", g_filecnt);
+    construct_argv(argv, ARRLEN(argv), wintitle.f.cmd, g_files[g_fileidx].path,
                    fidx, fcnt, w, h, z, NULL);
     wintitle.pid = spawn(&wintitle.fd, NULL, O_NONBLOCK, argv);
 }
@@ -351,81 +350,83 @@ void close_info(void)
 void open_info(void)
 {
     char *argv[6], w[12] = "", h[12] = "";
-    char *cmd = mode == MODE_IMAGE ? info.f.cmd : info.ft.cmd;
-    bool ferr = mode == MODE_IMAGE ? info.f.err : info.ft.err;
+    char *cmd = g_mode == MODE_IMAGE ? info.f.cmd : info.ft.cmd;
+    bool ferr = g_mode == MODE_IMAGE ? info.f.err : info.ft.err;
 
-    if (ferr || info.fd >= 0 || win.bar.h == 0)
+    if (ferr || info.fd >= 0 || g_win.bar.h == 0)
         return;
-    win.bar.l.buf[0] = '\0';
-    if (mode == MODE_IMAGE) {
-        snprintf(w, sizeof(w), "%d", img.w);
-        snprintf(h, sizeof(h), "%d", img.h);
+    g_win.bar.l.buf[0] = '\0';
+    if (g_mode == MODE_IMAGE) {
+        snprintf(w, sizeof(w), "%d", g_img.w);
+        snprintf(h, sizeof(h), "%d", g_img.h);
     }
-    construct_argv(argv, ARRLEN(argv), cmd, files[fileidx].name, w, h,
-                   files[fileidx].path, NULL);
+    construct_argv(argv, ARRLEN(argv), cmd, g_files[g_fileidx].name, w, h,
+                   g_files[g_fileidx].path, NULL);
     info.pid = spawn(&info.fd, NULL, O_NONBLOCK, argv);
 }
 
 static void read_info(void)
 {
-    ssize_t i, n;
-
-    if ((n = read(info.fd, win.bar.l.buf, win.bar.l.size - 1)) > 0) {
-        win.bar.l.buf[n] = '\0';
-        for (i = 0; i < n; ++i) {
-            if (win.bar.l.buf[i] == '\n')
-                win.bar.l.buf[i] = ' ';
-        }
-        win_draw(&win);
+    ssize_t n = read(info.fd, g_win.bar.l.buf, g_win.bar.l.size - 1);
+    if (n <= 0) {
+        close_info();
+        return;
     }
+
+    g_win.bar.l.buf[n] = '\0';
+    for (ssize_t i = 0; i < n; ++i) {
+        if (g_win.bar.l.buf[i] == '\n')
+            g_win.bar.l.buf[i] = ' ';
+    }
+    win_draw(&g_win);
     close_info();
 }
 
 void load_image(int new)
 {
-    bool prev = new < fileidx;
+    bool prev = new < g_fileidx;
     static int current;
 
-    if (new < 0 || new >= filecnt)
+    if (new < 0 || new >= g_filecnt)
         return;
 
-    if (win.xwin != None)
-        win_set_cursor(&win, CURSOR_WATCH);
+    if (g_win.xwin != None)
+        win_set_cursor(&g_win, CURSOR_WATCH);
     reset_timeout(autoreload);
     reset_timeout(slideshow);
 
     if (new != current) {
-        alternate = current;
-        img.autoreload_pending = false;
+        g_alternate = current;
+        g_img.autoreload_pending = false;
     }
 
-    img_close(&img, false);
-    while (!img_load(&img, &files[new])) {
+    img_close(&g_img, false);
+    while (!img_load(&g_img, &g_files[new])) {
         remove_file(new, false);
-        if (new >= filecnt)
-            new = filecnt - 1;
+        if (new >= g_filecnt)
+            new = g_filecnt - 1;
         else if (new > 0 && prev)
             new -= 1;
     }
-    files[new].flags &= ~FF_WARN;
-    fileidx = current = new;
+    g_files[new].flags &= ~FF_WARN;
+    g_fileidx = current = new;
 
-    arl_add(&arl, files[fileidx].path);
+    autoreload_add(&g_state_autoreload, g_files[g_fileidx].path);
 
-    if (img.multi.cnt > 0 && img.multi.animate)
-        set_timeout(animate, img.multi.frames[img.multi.sel].delay, true);
+    if (g_img.multi.cnt > 0 && g_img.multi.animate)
+        set_timeout(animate, g_img.multi.frames[g_img.multi.sel].delay, true);
     else
         reset_timeout(animate);
 }
 
 bool mark_image(int n, bool on)
 {
-    markidx = n;
-    if (!!(files[n].flags & FF_MARK) != on) {
-        files[n].flags ^= FF_MARK;
-        markcnt += on ? 1 : -1;
-        if (mode == MODE_THUMB)
-            tns_mark(&tns, n, on);
+    g_markidx = n;
+    if (!!(g_files[n].flags & FF_MARK) != on) {
+        g_files[n].flags ^= FF_MARK;
+        g_markcnt += on ? 1 : -1;
+        if (g_mode == MODE_THUMB)
+            tns_mark(&g_tns, n, on);
         return true;
     }
     return false;
@@ -444,9 +445,8 @@ static void bar_put(win_bar_t *bar, const char *fmt, ...)
 
 static void update_info(void)
 {
-    unsigned int i, fn, fw;
     const char *mark;
-    win_bar_t *l = &win.bar.l, *r = &win.bar.r;
+    win_bar_t *l = &g_win.bar.l, *r = &g_win.bar.r;
 
     static struct {
         const char *filepath;
@@ -455,61 +455,66 @@ static void update_info(void)
         appmode_t mode;
     } prev;
 
-    if (prev.fileidx != fileidx || prev.mode != mode ||
-        (prev.filepath == NULL || !STREQ(prev.filepath, files[fileidx].path)))
+    if (prev.fileidx != g_fileidx || prev.mode != g_mode ||
+        (prev.filepath == NULL || !STREQ(prev.filepath, g_files[g_fileidx].path)))
     {
         close_info();
         open_info();
         open_title();
-    } else if (mode == MODE_IMAGE && prev.zoom != img.zoom) {
+    } else if (g_mode == MODE_IMAGE && prev.zoom != g_img.zoom) {
         open_title();
     }
 
-    if (win.bar.h == 0 || extprefix)
+    if (g_win.bar.h == 0 || extprefix)
         return;
 
     free((char *)prev.filepath);
-    prev.filepath = estrdup(files[fileidx].path);
-    prev.fileidx = fileidx;
-    prev.zoom = img.zoom;
-    prev.mode = mode;
+    prev.filepath = estrdup(g_files[g_fileidx].path);
+    prev.fileidx = g_fileidx;
+    prev.zoom = g_img.zoom;
+    prev.mode = g_mode;
 
-    for (fw = 0, i = filecnt; i > 0; fw++, i /= 10)
+    uint32_t fw = 0;
+    for (uint32_t i = g_filecnt; i > 0; fw++, i /= 10)
         ;
-    mark = files[fileidx].flags & FF_MARK ? "* " : "";
+
+    mark = g_files[g_fileidx].flags & FF_MARK ? "* " : "";
     l->p = l->buf;
     r->p = r->buf;
-    if (mode == MODE_THUMB) {
-        if (tns.next_to_load_in_view < tns.visible_thumbs.end)
-            bar_put(r, "Loading... %0*d | ", fw, tns.next_to_load_in_view + 1);
-        else if (tns.next_to_init < filecnt)
-            bar_put(r, "Caching... %0*d | ", fw, tns.next_to_init + 1);
-        bar_put(r, "%s%0*d/%d", mark, fw, fileidx + 1, filecnt);
+    if (g_mode == MODE_THUMB) {
+        if (g_tns.next_to_load_in_view < g_tns.visible_thumbs.end)
+            bar_put(r, "Loading... %0*d | ", fw, g_tns.next_to_load_in_view + 1);
+        else if (g_tns.next_to_init < g_filecnt)
+            bar_put(r, "Caching... %0*d | ", fw, g_tns.next_to_init + 1);
+        bar_put(r, "%s%0*d/%d", mark, fw, g_fileidx + 1, g_filecnt);
         if (info.ft.err)
-            strncpy(l->buf, files[fileidx].name, l->size);
+            strncpy(l->buf, g_files[g_fileidx].name, l->size);
     } else {
         bar_put(r, "%s", mark);
-        if (img.ss.on) {
-            if (img.ss.delay % 10 != 0)
-                bar_put(r, "%2.1fs" BAR_SEP, (float)img.ss.delay / 10);
+        if (g_img.ss.on) {
+            if (g_img.ss.delay % 10 != 0)
+                bar_put(r, "%2.1fs" BAR_SEP, (float)g_img.ss.delay / 10);
             else
-                bar_put(r, "%ds" BAR_SEP, img.ss.delay / 10);
+                bar_put(r, "%ds" BAR_SEP, g_img.ss.delay / 10);
         }
-        if (img.gamma)
-            bar_put(r, "G%+d" BAR_SEP, img.gamma);
-        if (img.brightness)
-            bar_put(r, "B%+d" BAR_SEP, img.brightness);
-        if (img.contrast)
-            bar_put(r, "C%+d" BAR_SEP, img.contrast);
-        bar_put(r, "%3d%%" BAR_SEP, (int)(img.zoom * 100.0));
-        if (img.multi.cnt > 0) {
-            for (fn = 0, i = img.multi.cnt; i > 0; fn++, i /= 10)
+        if (g_img.gamma)
+            bar_put(r, "G%+d" BAR_SEP, g_img.gamma);
+        if (g_img.brightness)
+            bar_put(r, "B%+d" BAR_SEP, g_img.brightness);
+        if (g_img.contrast)
+            bar_put(r, "C%+d" BAR_SEP, g_img.contrast);
+        bar_put(r, "%3d%%" BAR_SEP, (int)(g_img.zoom * 100.0));
+
+        if (g_img.multi.cnt > 0) {
+            uint32_t fn = 0;
+            for (uint32_t i = g_img.multi.cnt; i > 0; fn++, i /= 10)
                 ;
-            bar_put(r, "%0*d/%d" BAR_SEP, fn, img.multi.sel + 1, img.multi.cnt);
+            bar_put(r, "%0*d/%d" BAR_SEP, fn, g_img.multi.sel + 1, g_img.multi.cnt);
         }
-        bar_put(r, "%0*d/%d", fw, fileidx + 1, filecnt);
+
+        bar_put(r, "%0*d/%d", fw, g_fileidx + 1, g_filecnt);
         if (info.f.err)
-            strncpy(l->buf, files[fileidx].name, l->size);
+            strncpy(l->buf, g_files[g_fileidx].name, l->size);
     }
 }
 
@@ -520,77 +525,71 @@ int nav_button(void)
     if (NAV_WIDTH == 0)
         return 1;
 
-    win_cursor_pos(&win, &x, &y);
-    nw = NAV_IS_REL ? win.w * NAV_WIDTH / 100 : NAV_WIDTH;
-    nw = MIN(nw, ((int)win.w + 1) / 2);
+    win_cursor_pos(&g_win, &x, &y);
+    nw = NAV_IS_REL ? g_win.w * NAV_WIDTH / 100 : NAV_WIDTH;
+    nw = MIN(nw, ((int)g_win.w + 1) / 2);
 
     if (x < nw)
         return 0;
-    else if (x < (int)win.w - nw)
+    if (x < (int)g_win.w - nw)
         return 1;
-    else
-        return 2;
+    return 2;
 }
 
 void redraw(void)
 {
-    int t;
-
-    if (mode == MODE_IMAGE) {
-        img_render(&img);
-        if (img.ss.on) {
-            t = img.ss.delay * 100;
-            if (img.multi.cnt > 0 && img.multi.animate)
-                t = MAX(t, img.multi.length);
+    if (g_mode == MODE_IMAGE) {
+        img_render(&g_img);
+        if (g_img.ss.on) {
+            int t = g_img.ss.delay * 100;
+            if (g_img.multi.cnt > 0 && g_img.multi.animate)
+                t = MAX(t, g_img.multi.length);
             set_timeout(slideshow, t, false);
         }
     } else {
-        tns_render(&tns);
+        tns_render(&g_tns);
     }
     update_info();
-    win_draw(&win);
+    win_draw(&g_win);
     reset_timeout(redraw);
     reset_cursor();
 }
 
 void reset_cursor(void)
 {
-    int c;
-    unsigned int i;
-    cursor_t cursor = CURSOR_NONE;
-
-    if (mode == MODE_IMAGE) {
-        for (i = 0; i < ARRLEN(timeouts); i++) {
-            if (timeouts[i].handler == reset_cursor) {
-                if (timeouts[i].active) {
-                    c = nav_button();
-                    c = MAX(fileidx > 0 ? 0 : 1, c);
-                    c = MIN(fileidx + 1 < filecnt ? 2 : 1, c);
-                    cursor = imgcursor[c];
-                }
-                break;
-            }
-        }
-    } else {
-        if (tns.next_to_load_in_view < tns.visible_thumbs.end || tns.next_to_init < filecnt)
-            cursor = CURSOR_WATCH;
-        else
-            cursor = CURSOR_ARROW;
+    if (g_mode != MODE_IMAGE) {
+        win_set_cursor(&g_win, 
+            (g_tns.next_to_load_in_view < g_tns.visible_thumbs.end || g_tns.next_to_init < g_filecnt)
+                ? CURSOR_WATCH : CURSOR_ARROW);
+        return;
     }
-    win_set_cursor(&win, cursor);
+
+    cursor_t cursor = CURSOR_NONE;
+    for (uint32_t i = 0; i < ARRLEN(timeouts); i++) {
+        if (timeouts[i].handler == reset_cursor) {
+            if (timeouts[i].active) {
+                int c = nav_button();
+                c = MAX(g_fileidx > 0 ? 0 : 1, c);
+                c = MIN(g_fileidx + 1 < g_filecnt ? 2 : 1, c);
+                cursor = imgcursor[c];
+            }
+            break;
+        }
+    }
+    win_set_cursor(&g_win, cursor);
 }
 
 void animate(void)
 {
-    if (img_frame_animate(&img)) {
-        set_timeout(animate, img.multi.frames[img.multi.sel].delay, true);
+    if (img_frame_animate(&g_img)) {
+        set_timeout(animate, g_img.multi.frames[g_img.multi.sel].delay, true);
         redraw();
     }
 }
 
 void slideshow(void)
 {
-    load_image(fileidx + 1 < filecnt ? fileidx + 1 : 0);
+    load_image(g_fileidx + 1 < g_filecnt ? g_fileidx + 1 : 0);
     redraw();
 }
 
@@ -607,26 +606,26 @@ static Bool is_input_ev(Display *dpy, XEvent *ev, XPointer arg)
 void handle_key_handler(bool init)
 {
     extprefix = init;
-    if (win.bar.h == 0)
+    if (g_win.bar.h == 0)
         return;
     if (init) {
-        snprintf(win.bar.r.buf, win.bar.r.size,
+        snprintf(g_win.bar.r.buf, g_win.bar.r.size,
                  "Getting key handler input (%s to abort)...",
                  XKeysymToString(KEYHANDLER_ABORT));
     } else { /* abort */
         update_info();
     }
-    win_draw(&win);
+    win_draw(&g_win);
 }
 
 static bool run_key_handler(const char *key, unsigned int mask)
 {
     FILE *pfs;
-    bool marked = mode == MODE_THUMB && markcnt > 0;
+    bool marked = g_mode == MODE_THUMB && g_markcnt > 0;
     bool changed = false;
     pid_t pid;
     int writefd, f, i;
-    int fcnt = marked ? markcnt : 1;
+    int fcnt = marked ? g_markcnt : 1;
     char kstr[32];
     struct stat *oldst, st;
     XEvent dump;
@@ -642,9 +641,9 @@ static bool run_key_handler(const char *key, unsigned int mask)
     if (key == NULL)
         return false;
 
-    strncpy(win.bar.r.buf, "Running key handler...", win.bar.r.size);
-    win_draw(&win);
-    win_set_cursor(&win, CURSOR_WATCH);
+    strncpy(g_win.bar.r.buf, "Running key handler...", g_win.bar.r.size);
+    win_draw(&g_win);
+    win_set_cursor(&g_win, CURSOR_WATCH);
     setenv("NSXIV_USING_NULL", options->using_null ? "1" : "0", 1);
 
     snprintf(kstr, sizeof(kstr), "%s%s%s%s",
@@ -662,9 +661,9 @@ static bool run_key_handler(const char *key, unsigned int mask)
 
     oldst = emalloc(fcnt * sizeof(*oldst));
     for (f = i = 0; f < fcnt; i++) {
-        if ((marked && (files[i].flags & FF_MARK)) || (!marked && i == fileidx)) {
-            stat(files[i].path, &oldst[f]);
-            fprintf(pfs, "%s%c", files[i].name, options->using_null ? '\0' : '\n');
+        if ((marked && (g_files[i].flags & FF_MARK)) || (!marked && i == g_fileidx)) {
+            stat(g_files[i].path, &oldst[f]);
+            fprintf(pfs, "%s%c", g_files[i].name, options->using_null ? '\0' : '\n');
             f++;
         }
     }
@@ -673,13 +672,13 @@ static bool run_key_handler(const char *key, unsigned int mask)
         ;
 
     for (f = i = 0; f < fcnt; i++) {
-        if ((marked && (files[i].flags & FF_MARK)) || (!marked && i == fileidx)) {
-            if (stat(files[i].path, &st) != 0 ||
+        if ((marked && (g_files[i].flags & FF_MARK)) || (!marked && i == g_fileidx)) {
+            if (stat(g_files[i].path, &st) != 0 ||
                 memcmp(&oldst[f].st_mtime, &st.st_mtime, sizeof(st.st_mtime)) != 0)
             {
-                if (tns.thumbs != NULL) {
-                    tns_unload(&tns, i);
-                    tns.next_to_load_in_view = MIN(tns.next_to_load_in_view, i);
+                if (g_tns.thumbs != NULL) {
+                    tns_unload(&g_tns, i);
+                    g_tns.next_to_load_in_view = MIN(g_tns.next_to_load_in_view, i);
                 }
                 changed = true;
             }
@@ -687,12 +686,12 @@ static bool run_key_handler(const char *key, unsigned int mask)
         }
     }
     /* drop user input events that occurred while running the key handler */
-    while (XCheckIfEvent(win.env.dpy, &dump, is_input_ev, NULL))
+    while (XCheckIfEvent(g_win.env.dpy, &dump, is_input_ev, NULL))
         ;
 
-    if (mode == MODE_IMAGE && changed) {
-        img_close(&img, true);
-        load_image(fileidx);
+    if (g_mode == MODE_IMAGE && changed) {
+        img_close(&g_img, true);
+        load_image(g_fileidx);
     } else {
         update_info();
     }
@@ -711,7 +710,7 @@ static bool process_bindings(const keymap_t *bindings, unsigned int len, KeySym 
         if (bindings[i].ksym_or_button == ksym_or_button &&
             MODMASK(bindings[i].mask | implicit_mod) == MODMASK(state) &&
             bindings[i].cmd.func != NULL &&
-            (bindings[i].cmd.mode == MODE_ALL || bindings[i].cmd.mode == mode))
+            (bindings[i].cmd.mode == MODE_ALL || bindings[i].cmd.mode == g_mode))
         {
             if (bindings[i].cmd.func(bindings[i].arg))
                 dirty = true;
@@ -747,21 +746,21 @@ static void on_keypress(XKeyEvent *kev)
             handle_key_handler(false);
     } else if (key >= '0' && key <= '9') {
         /* number prefix for commands */
-        prefix = prefix * 10 + (int)(key - '0');
+        g_prefix = g_prefix * 10 + (int)(key - '0');
         return;
     } else {
         dirty = process_bindings(keys, ARRLEN(keys), ksym, kev->state, sh);
     }
     if (dirty)
         redraw();
-    prefix = 0;
+    g_prefix = 0;
 }
 
 static void on_buttonpress(const XButtonEvent *bev)
 {
     bool dirty = false;
 
-    if (mode == MODE_IMAGE) {
+    if (g_mode == MODE_IMAGE) {
         set_timeout(reset_cursor, TO_CURSOR_HIDE, true);
         reset_cursor();
         dirty = process_bindings(buttons_img, ARRLEN(buttons_img), bev->button, bev->state, 0);
@@ -770,48 +769,49 @@ static void on_buttonpress(const XButtonEvent *bev)
     }
     if (dirty)
         redraw();
-    prefix = 0;
+    g_prefix = 0;
 }
 
 static void run(void)
 {
-    enum { FD_X, FD_INFO, FD_TITLE, FD_ARL, FD_CNT };
-    struct pollfd pfd[FD_CNT];
-    int timeout = 0;
-    bool discard, init_thumb, load_thumb, to_set;
-    XEvent ev, nextev;
+    int32_t timeout = 0;
+    XEvent ev;
+    g_xbutton_ev = &ev.xbutton;
 
-    xbutton_ev = &ev.xbutton;
     while (true) {
-        to_set = check_timeouts(&timeout);
-        init_thumb = mode == MODE_THUMB && tns.next_to_init < filecnt;
-        load_thumb = mode == MODE_THUMB && tns.next_to_load_in_view < tns.visible_thumbs.end;
+        bool to_set = check_timeouts(&timeout);
+        bool should_init_thumb = g_mode == MODE_THUMB && g_tns.next_to_init < g_filecnt;
+        bool should_load_thumb = g_mode == MODE_THUMB && g_tns.next_to_load_in_view < g_tns.visible_thumbs.end;
 
-                // "Only do heavy processing while there are no events to process"
-                if (XPending(win.env.dpy) == 0) {
-            if (load_thumb) {
+        // "Only do heavy processing while there are no events to process"
+        if (XPending(g_win.env.dpy) == 0) {
+            if (should_load_thumb) {
                 set_timeout(redraw, TO_REDRAW_THUMBS, false);
-                if (!tns_load(&tns, tns.next_to_load_in_view, false, false)) {
-                    remove_file(tns.next_to_load_in_view, false);
-                    tns.dirty = true;
+                if (!tns_load(&g_tns, g_tns.next_to_load_in_view, false, false)) {
+                    remove_file(g_tns.next_to_load_in_view, false);
+                    g_tns.dirty = true;
                 }
-                if (tns.next_to_load_in_view >= tns.visible_thumbs.end) {
+                if (g_tns.next_to_load_in_view >= g_tns.visible_thumbs.end) {
                     open_info();
                     redraw();
                 }
-                                continue;
+                continue;
             }
-                        if (init_thumb) {
+            if (should_init_thumb) {
                 set_timeout(redraw, TO_REDRAW_THUMBS, false);
-                if (!tns_load(&tns, tns.next_to_init, false, true))
-                    remove_file(tns.next_to_init, false);
-                                continue;
+                if (!tns_load(&g_tns, g_tns.next_to_init, false, true))
+                    remove_file(g_tns.next_to_init, false);
+                continue;
             }
-                        if (to_set || info.fd != -1 || arl.fd != -1) {
-                pfd[FD_X].fd = ConnectionNumber(win.env.dpy);
+            if (to_set || info.fd != -1 || g_state_autoreload.fd != -1) {
+                enum { FD_X, FD_INFO, FD_TITLE, FD_ARL, FD_CNT };
+                // This needs to be reinitialized in every loop... might as well declare it here
+                struct pollfd pfd[FD_CNT];
+
+                pfd[FD_X].fd = ConnectionNumber(g_win.env.dpy);
                 pfd[FD_INFO].fd = info.fd;
                 pfd[FD_TITLE].fd = wintitle.fd;
-                pfd[FD_ARL].fd = arl.fd;
+                pfd[FD_ARL].fd = g_state_autoreload.fd;
 
                 pfd[FD_X].events = pfd[FD_ARL].events = POLLIN;
                 pfd[FD_INFO].events = pfd[FD_TITLE].events = 0;
@@ -822,19 +822,21 @@ static void run(void)
                     read_info();
                 if (pfd[FD_TITLE].revents & POLLHUP)
                     read_title();
-                if ((pfd[FD_ARL].revents & POLLIN) && arl_handle(&arl)) {
-                    img.autoreload_pending = true;
+                if ((pfd[FD_ARL].revents & POLLIN) && autoreload_handle_events(&g_state_autoreload)) {
+                    g_img.autoreload_pending = true;
                     set_timeout(autoreload, TO_AUTORELOAD, true);
                 }
-                                continue;
+                continue;
             }
         }
 
+        bool discard;
         do {
-            XNextEvent(win.env.dpy, &ev);
+            XNextEvent(g_win.env.dpy, &ev);
             discard = false;
-            if (XEventsQueued(win.env.dpy, QueuedAlready) > 0) {
-                XPeekEvent(win.env.dpy, &nextev);
+            if (XEventsQueued(g_win.env.dpy, QueuedAlready) > 0) {
+                XEvent nextev;
+                XPeekEvent(g_win.env.dpy, &nextev);
                 switch (ev.type) {
                 case ConfigureNotify:
                 case MotionNotify:
@@ -860,12 +862,12 @@ static void run(void)
             cg_quit(EXIT_FAILURE);
             break;
         case ConfigureNotify:
-            if (win_configure(&win, &ev.xconfigure)) {
-                if (mode == MODE_IMAGE) {
-                    img.dirty = true;
-                    img.checkpan = true;
+            if (win_configure(&g_win, &ev.xconfigure)) {
+                if (g_mode == MODE_IMAGE) {
+                    g_img.dirty = true;
+                    g_img.checkpan = true;
                 } else {
-                    tns.dirty = true;
+                    g_tns.dirty = true;
                 }
                 if (!resized) {
                     redraw();
@@ -880,14 +882,13 @@ static void run(void)
             on_keypress(&ev.xkey);
             break;
         case MotionNotify:
-            if (mode == MODE_IMAGE) {
+            if (g_mode == MODE_IMAGE) {
                 set_timeout(reset_cursor, TO_CURSOR_HIDE, true);
                 reset_cursor();
             }
             break;
         }
     }
-    printf("=========================================================================================###################################################################################\n");
 }
 
 static void setup_signal(int sig, void (*handler)(int sig), int flags)
@@ -915,7 +916,7 @@ int main(int argc, char *argv[])
     parse_options(argc, argv);
 
     if (options->clean_cache) {
-        tns_init(&tns, NULL, NULL, NULL, NULL);
+        tns_init(&g_tns, NULL, NULL, NULL, NULL);
         tns_clean_cache();
         exit(EXIT_SUCCESS);
     }
@@ -926,12 +927,12 @@ int main(int argc, char *argv[])
     }
 
     if (options->recursive || options->from_stdin)
-        filecnt = 1024;
+        g_filecnt = 1024;
     else
-        filecnt = options->filecnt;
+        g_filecnt = options->filecnt;
 
-    files = ecalloc(filecnt, sizeof(*files));
-    fileidx = 0;
+    g_files = ecalloc(g_filecnt, sizeof(*g_files));
+    g_fileidx = 0;
 
     if (options->from_stdin) {
         char *filename = NULL;
@@ -944,20 +945,20 @@ int main(int argc, char *argv[])
     for (i = 0; i < options->filecnt; i++)
         add_entry(options->filenames[i]);
 
-    if (fileidx == 0)
+    if (g_fileidx == 0)
         error(EXIT_FAILURE, 0, "No valid image file given, aborting");
 
-    filecnt = fileidx;
-    fileidx = options->startnum < filecnt ? options->startnum : 0;
+    g_filecnt = g_fileidx;
+    g_fileidx = options->startnum < g_filecnt ? options->startnum : 0;
 
     if (options->background_cache && !options->private_mode) {
         pid_t ppid = getpid(); /* to check if parent is still alive or not */
         switch (fork()) {
         case 0:
-            tns_init(&tns, files, &filecnt, &fileidx, NULL);
-            while (filecnt > 0 && getppid() == ppid) {
-                tns_load(&tns, filecnt - 1, false, true);
-                remove_file(filecnt - 1, true);
+            tns_init(&g_tns, g_files, &g_filecnt, &g_fileidx, NULL);
+            while (g_filecnt > 0 && getppid() == ppid) {
+                tns_load(&g_tns, g_filecnt - 1, false, true);
+                remove_file(g_filecnt - 1, true);
             }
             exit(0);
             break;
@@ -967,9 +968,9 @@ int main(int argc, char *argv[])
         }
     }
 
-    win_init(&win);
-    img_init(&img, &win);
-    arl_init(&arl);
+    win_init(&g_win);
+    img_init(&g_img, &g_win);
+    autoreload_init(&g_state_autoreload);
 
     if ((homedir = getenv("XDG_CONFIG_HOME")) == NULL || homedir[0] == '\0') {
         homedir = getenv("HOME");
@@ -993,17 +994,17 @@ int main(int argc, char *argv[])
     wintitle.fd = info.fd = -1;
 
     if (options->thumb_mode) {
-        mode = MODE_THUMB;
-        tns_init(&tns, files, &filecnt, &fileidx, &win);
-        while (!tns_load(&tns, fileidx, false, false))
-            remove_file(fileidx, false);
+        g_mode = MODE_THUMB;
+        tns_init(&g_tns, g_files, &g_filecnt, &g_fileidx, &g_win);
+        while (!tns_load(&g_tns, g_fileidx, false, false))
+            remove_file(g_fileidx, false);
     } else {
-        mode = MODE_IMAGE;
-        tns.thumbs = NULL;
-        load_image(fileidx);
+        g_mode = MODE_IMAGE;
+        g_tns.thumbs = NULL;
+        load_image(g_fileidx);
     }
-    win_open(&win);
-    win_set_cursor(&win, CURSOR_WATCH);
+    win_open(&g_win);
+    win_set_cursor(&g_win, CURSOR_WATCH);
 
     atexit(cleanup);
 

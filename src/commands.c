@@ -27,18 +27,18 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-extern img_t img;
-extern tns_t tns;
-extern win_t win;
+extern img_t g_img;
+extern tns_t g_tns;
+extern win_t g_win;
 
 static bool navigate_to(arg_t n)
 {
-    if (n >= 0 && n < filecnt && n != fileidx) {
-        if (mode == MODE_IMAGE) {
+    if (n >= 0 && n < g_filecnt && n != g_fileidx) {
+        if (g_mode == MODE_IMAGE) {
             load_image(n);
-        } else if (mode == MODE_THUMB) {
-            fileidx = n;
-            tns.dirty = true;
+        } else if (g_mode == MODE_THUMB) {
+            g_fileidx = n;
+            g_tns.dirty = true;
         }
         return true;
     }
@@ -47,12 +47,10 @@ static bool navigate_to(arg_t n)
 
 bool cg_quit(arg_t status)
 {
-    unsigned int i;
-
-    if (options->to_stdout && markcnt > 0) {
-        for (i = 0; i < (unsigned int)filecnt; i++) {
-            if (files[i].flags & FF_MARK)
-                printf("%s%c", files[i].name, options->using_null ? '\0' : '\n');
+    if (options->to_stdout && g_markcnt > 0) {
+        for (size_t i = 0; i < (size_t)g_filecnt; i++) {
+            if (g_files[i].flags & FF_MARK)
+                printf("%s%c", g_files[i].name, options->using_null ? '\0' : '\n');
         }
     }
     exit(status);
@@ -61,51 +59,51 @@ bool cg_quit(arg_t status)
 
 bool cg_pick_quit(arg_t status)
 {
-    if (options->to_stdout && markcnt == 0)
-        printf("%s%c", files[fileidx].name, options->using_null ? '\0' : '\n');
+    if (options->to_stdout && g_markcnt == 0)
+        printf("%s%c", g_files[g_fileidx].name, options->using_null ? '\0' : '\n');
     return cg_quit(status);
 }
 
 bool cg_switch_mode(arg_t _)
 {
-    if (mode == MODE_IMAGE) {
-        if (tns.thumbs == NULL)
-            tns_init(&tns, files, &filecnt, &fileidx, &win);
-        img_close(&img, false);
+    if (g_mode == MODE_IMAGE) {
+        if (g_tns.thumbs == NULL)
+            tns_init(&g_tns, g_files, &g_filecnt, &g_fileidx, &g_win);
+        img_close(&g_img, false);
         reset_timeout(reset_cursor);
-        if (img.ss.on) {
-            img.ss.on = false;
+        if (g_img.ss.on) {
+            g_img.ss.on = false;
             reset_timeout(slideshow);
         }
-        tns.dirty = true;
-        mode = MODE_THUMB;
+        g_tns.dirty = true;
+        g_mode = MODE_THUMB;
     } else {
-        load_image(fileidx);
-        mode = MODE_IMAGE;
+        load_image(g_fileidx);
+        g_mode = MODE_IMAGE;
     }
     return true;
 }
 
 bool cg_toggle_fullscreen(arg_t _)
 {
-    win_toggle_fullscreen(&win);
+    win_toggle_fullscreen(&g_win);
     /* redraw after next ConfigureNotify event */
     set_timeout(redraw, TO_REDRAW_RESIZE, false);
-    if (mode == MODE_IMAGE)
-        img.checkpan = img.dirty = true;
+    if (g_mode == MODE_IMAGE)
+        g_img.checkpan = g_img.dirty = true;
     else
-        tns.dirty = true;
+        g_tns.dirty = true;
     return false;
 }
 
 bool cg_toggle_bar(arg_t _)
 {
-    win_toggle_bar(&win);
-    if (mode == MODE_IMAGE)
-        img.checkpan = img.dirty = true;
+    win_toggle_bar(&g_win);
+    if (g_mode == MODE_IMAGE)
+        g_img.checkpan = g_img.dirty = true;
     else
-        tns.dirty = true;
-    if (win.bar.h > 0)
+        g_tns.dirty = true;
+    if (g_win.bar.h > 0)
         open_info();
     else
         close_info();
@@ -120,13 +118,13 @@ bool cg_prefix_external(arg_t _)
 
 bool cg_reload_image(arg_t _)
 {
-    if (mode == MODE_IMAGE) {
-        load_image(fileidx);
+    if (g_mode == MODE_IMAGE) {
+        load_image(g_fileidx);
     } else {
-        win_set_cursor(&win, CURSOR_WATCH);
-        if (!tns_load(&tns, fileidx, true, false)) {
-            remove_file(fileidx, false);
-            tns.dirty = true;
+        win_set_cursor(&g_win, CURSOR_WATCH);
+        if (!tns_load(&g_tns, g_fileidx, true, false)) {
+            remove_file(g_fileidx, false);
+            g_tns.dirty = true;
         }
     }
     return true;
@@ -134,11 +132,11 @@ bool cg_reload_image(arg_t _)
 
 bool cg_remove_image(arg_t _)
 {
-    remove_file(fileidx, true);
-    if (mode == MODE_IMAGE)
-        load_image(fileidx);
+    remove_file(g_fileidx, true);
+    if (g_mode == MODE_IMAGE)
+        load_image(g_fileidx);
     else
-        tns.dirty = true;
+        g_tns.dirty = true;
     return true;
 }
 
@@ -149,50 +147,50 @@ bool cg_first(arg_t _)
 
 bool cg_n_or_last(arg_t _)
 {
-    int n = prefix != 0 && prefix - 1 < filecnt ? prefix - 1 : filecnt - 1;
+    int n = g_prefix != 0 && g_prefix - 1 < g_filecnt ? g_prefix - 1 : g_filecnt - 1;
     return navigate_to(n);
 }
 
 bool cg_scroll_screen(arg_t dir)
 {
-    if (mode == MODE_IMAGE)
-        return img_pan(&img, dir, -1);
+    if (g_mode == MODE_IMAGE)
+        return img_pan(&g_img, dir, -1);
     else
-        return tns_scroll(&tns, dir, true);
+        return tns_scroll(&g_tns, dir, true);
 }
 
 bool cg_zoom(arg_t d)
 {
-    if (mode == MODE_THUMB)
-        return tns_zoom(&tns, d);
+    if (g_mode == MODE_THUMB)
+        return tns_zoom(&g_tns, d);
     else
-        return img_zoom(&img, d);
+        return img_zoom(&g_img, d);
 }
 
 bool cg_toggle_image_mark(arg_t _)
 {
-    return mark_image(fileidx, !(files[fileidx].flags & FF_MARK));
+    return mark_image(g_fileidx, !(g_files[g_fileidx].flags & FF_MARK));
 }
 
 bool cg_reverse_marks(arg_t _)
 {
     int i;
 
-    for (i = 0; i < filecnt; i++) {
-        files[i].flags ^= FF_MARK;
-        markcnt += files[i].flags & FF_MARK ? 1 : -1;
+    for (i = 0; i < g_filecnt; i++) {
+        g_files[i].flags ^= FF_MARK;
+        g_markcnt += g_files[i].flags & FF_MARK ? 1 : -1;
     }
-    if (mode == MODE_THUMB)
-        tns.dirty = true;
+    if (g_mode == MODE_THUMB)
+        g_tns.dirty = true;
     return true;
 }
 
 bool cg_mark_range(arg_t _)
 {
-    int d = markidx < fileidx ? 1 : -1, end, i;
-    bool dirty = false, on = !!(files[markidx].flags & FF_MARK);
+    int d = g_markidx < g_fileidx ? 1 : -1, end, i;
+    bool dirty = false, on = !!(g_files[g_markidx].flags & FF_MARK);
 
-    for (i = markidx + d, end = fileidx + d; i != end; i += d)
+    for (i = g_markidx + d, end = g_fileidx + d; i != end; i += d)
         dirty |= mark_image(i, on);
     return dirty;
 }
@@ -201,24 +199,24 @@ bool cg_unmark_all(arg_t _)
 {
     int i;
 
-    for (i = 0; i < filecnt; i++)
-        files[i].flags &= ~FF_MARK;
-    markcnt = 0;
-    if (mode == MODE_THUMB)
-        tns.dirty = true;
+    for (i = 0; i < g_filecnt; i++)
+        g_files[i].flags &= ~FF_MARK;
+    g_markcnt = 0;
+    if (g_mode == MODE_THUMB)
+        g_tns.dirty = true;
     return true;
 }
 
 bool cg_navigate_marked(arg_t n)
 {
     int d, i;
-    int new = fileidx;
+    int new = g_fileidx;
 
-    if (prefix > 0)
-        n *= prefix;
+    if (g_prefix > 0)
+        n *= g_prefix;
     d = n > 0 ? 1 : -1;
-    for (i = fileidx + d; n != 0 && i >= 0 && i < filecnt; i += d) {
-        if (files[i].flags & FF_MARK) {
+    for (i = g_fileidx + d; n != 0 && i >= 0 && i < g_filecnt; i += d) {
+        if (g_files[i].flags & FF_MARK) {
             n -= d;
             new = i;
         }
@@ -228,36 +226,36 @@ bool cg_navigate_marked(arg_t n)
 
 static bool change_color_modifier(arg_t d, int *target)
 {
-    if (!img_change_color_modifier(&img, d * (prefix > 0 ? prefix : 1), target))
+    if (!img_change_color_modifier(&g_img, d * (g_prefix > 0 ? g_prefix : 1), target))
         return false;
-    if (mode == MODE_THUMB)
-        tns.dirty = true;
+    if (g_mode == MODE_THUMB)
+        g_tns.dirty = true;
     return true;
 }
 
 bool cg_change_gamma(arg_t d)
 {
-    return change_color_modifier(d, &img.gamma);
+    return change_color_modifier(d, &g_img.gamma);
 }
 
 bool cg_change_brightness(arg_t d)
 {
-    return change_color_modifier(d, &img.brightness);
+    return change_color_modifier(d, &g_img.brightness);
 }
 
 bool cg_change_contrast(arg_t d)
 {
-    return change_color_modifier(d, &img.contrast);
+    return change_color_modifier(d, &g_img.contrast);
 }
 
 bool ci_navigate(arg_t n)
 {
-    if (prefix > 0)
-        n *= prefix;
-    n += fileidx;
-    n = MAX(0, MIN(n, filecnt - 1));
+    if (g_prefix > 0)
+        n *= g_prefix;
+    n += g_fileidx;
+    n = MAX(0, MIN(n, g_filecnt - 1));
 
-    if (n != fileidx) {
+    if (n != g_fileidx) {
         load_image(n);
         return true;
     } else {
@@ -272,26 +270,26 @@ bool ci_cursor_navigate(arg_t _)
 
 bool ci_alternate(arg_t _)
 {
-    load_image(alternate);
+    load_image(g_alternate);
     return true;
 }
 
 bool ci_navigate_frame(arg_t d)
 {
-    if (prefix > 0)
-        d *= prefix;
-    return !img.multi.animate && img_frame_navigate(&img, d);
+    if (g_prefix > 0)
+        d *= g_prefix;
+    return !g_img.multi.animate && img_frame_navigate(&g_img, d);
 }
 
 bool ci_toggle_animation(arg_t _)
 {
     bool dirty = false;
 
-    if (img.multi.cnt > 0) {
-        img.multi.animate = !img.multi.animate;
-        if (img.multi.animate) {
-            dirty = img_frame_animate(&img);
-            set_timeout(animate, img.multi.frames[img.multi.sel].delay, true);
+    if (g_img.multi.cnt > 0) {
+        g_img.multi.animate = !g_img.multi.animate;
+        if (g_img.multi.animate) {
+            dirty = img_frame_animate(&g_img);
+            set_timeout(animate, g_img.multi.frames[g_img.multi.sel].delay, true);
         } else {
             reset_timeout(animate);
         }
@@ -301,17 +299,17 @@ bool ci_toggle_animation(arg_t _)
 
 bool ci_scroll(arg_t dir)
 {
-    return img_pan(&img, dir, prefix);
+    return img_pan(&g_img, dir, g_prefix);
 }
 
 bool ci_scroll_to_center(arg_t _)
 {
-    return img_pan_center(&img);
+    return img_pan_center(&g_img);
 }
 
 bool ci_scroll_to_edge(arg_t dir)
 {
-    return img_pan_edge(&img, dir);
+    return img_pan_edge(&g_img, dir);
 }
 
 bool ci_drag(arg_t drag_mode)
@@ -320,34 +318,34 @@ bool ci_drag(arg_t drag_mode)
     float px, py;
     XEvent e;
 
-    if ((int)(img.w * img.zoom) <= (int)win.w && (int)(img.h * img.zoom) <= (int)win.h)
+    if ((int)(g_img.w * g_img.zoom) <= (int)g_win.w && (int)(g_img.h * g_img.zoom) <= (int)g_win.h)
         return false;
 
-    win_set_cursor(&win, drag_mode == DRAG_ABSOLUTE ? CURSOR_DRAG_ABSOLUTE : CURSOR_DRAG_RELATIVE);
-    win_cursor_pos(&win, &x, &y);
+    win_set_cursor(&g_win, drag_mode == DRAG_ABSOLUTE ? CURSOR_DRAG_ABSOLUTE : CURSOR_DRAG_RELATIVE);
+    win_cursor_pos(&g_win, &x, &y);
     ox = x;
     oy = y;
 
     while (true) {
         if (drag_mode == DRAG_ABSOLUTE) {
-            px = MIN(MAX(0.0, x - win.w * 0.1), win.w * 0.8) /
-                 (win.w * 0.8) * (win.w - img.w * img.zoom);
-            py = MIN(MAX(0.0, y - win.h * 0.1), win.h * 0.8) /
-                 (win.h * 0.8) * (win.h - img.h * img.zoom);
+            px = MIN(MAX(0.0, x - g_win.w * 0.1), g_win.w * 0.8) /
+                 (g_win.w * 0.8) * (g_win.w - g_img.w * g_img.zoom);
+            py = MIN(MAX(0.0, y - g_win.h * 0.1), g_win.h * 0.8) /
+                 (g_win.h * 0.8) * (g_win.h - g_img.h * g_img.zoom);
         } else {
-            px = img.x + x - ox;
-            py = img.y + y - oy;
+            px = g_img.x + x - ox;
+            py = g_img.y + y - oy;
         }
 
-        if (img_pos(&img, px, py)) {
-            img_render(&img);
-            win_draw(&win);
+        if (img_pos(&g_img, px, py)) {
+            img_render(&g_img);
+            win_draw(&g_win);
         }
-        XMaskEvent(win.env.dpy,
+        XMaskEvent(g_win.env.dpy,
                    ButtonPressMask | ButtonReleaseMask | PointerMotionMask, &e);
         if (e.type == ButtonPress || e.type == ButtonRelease)
             break;
-        while (XCheckTypedEvent(win.env.dpy, MotionNotify, &e))
+        while (XCheckTypedEvent(g_win.env.dpy, MotionNotify, &e))
             ;
         ox = x;
         oy = y;
@@ -362,88 +360,88 @@ bool ci_drag(arg_t drag_mode)
 
 bool ci_set_zoom(arg_t zl)
 {
-    return img_zoom_to(&img, (prefix ? prefix : zl) / 100.0);
+    return img_zoom_to(&g_img, (g_prefix ? g_prefix : zl) / 100.0);
 }
 
 bool ci_fit_to_win(arg_t sm)
 {
-    return img_fit_win(&img, sm);
+    return img_fit_win(&g_img, sm);
 }
 
 bool ci_rotate(arg_t degree)
 {
-    img_rotate(&img, degree);
+    img_rotate(&g_img, degree);
     return true;
 }
 
 bool ci_flip(arg_t dir)
 {
-    img_flip(&img, dir);
+    img_flip(&g_img, dir);
     return true;
 }
 
 bool ci_toggle_antialias(arg_t _)
 {
-    img_toggle_antialias(&img);
+    img_toggle_antialias(&g_img);
     return true;
 }
 
 bool ci_toggle_alpha(arg_t _)
 {
-    img.alpha_layer = !img.alpha_layer;
-    img.dirty = true;
+    g_img.alpha_layer = !g_img.alpha_layer;
+    g_img.dirty = true;
     return true;
 }
 
 bool ci_slideshow(arg_t _)
 {
-    if (prefix > 0) {
-        img.ss.on = true;
-        img.ss.delay = prefix * 10;
-        set_timeout(slideshow, img.ss.delay * 100, true);
-    } else if (img.ss.on) {
-        img.ss.on = false;
+    if (g_prefix > 0) {
+        g_img.ss.on = true;
+        g_img.ss.delay = g_prefix * 10;
+        set_timeout(slideshow, g_img.ss.delay * 100, true);
+    } else if (g_img.ss.on) {
+        g_img.ss.on = false;
         reset_timeout(slideshow);
     } else {
-        img.ss.on = true;
+        g_img.ss.on = true;
     }
     return true;
 }
 
 bool ct_move_sel(arg_t dir)
 {
-    return tns_move_selection(&tns, dir, prefix);
+    return tns_move_selection(&g_tns, dir, g_prefix);
 }
 
 bool ct_reload_all(arg_t flags)
 {
-    tns_replace(&tns, files, &filecnt, &fileidx, &win, flags);
+    tns_replace(&g_tns, g_files, &g_filecnt, &g_fileidx, &g_win, flags);
     return true;
 }
 
 bool ct_scroll(arg_t dir)
 {
-    return tns_scroll(&tns, dir, false);
+    return tns_scroll(&g_tns, dir, false);
 }
 
 bool ct_drag_mark_image(arg_t _)
 {
     int sel;
 
-    if ((sel = tns_translate(&tns, xbutton_ev->x, xbutton_ev->y)) >= 0) {
+    if ((sel = tns_translate(&g_tns, g_xbutton_ev->x, g_xbutton_ev->y)) >= 0) {
         XEvent e;
-        bool on = !(files[sel].flags & FF_MARK);
+        bool on = !(g_files[sel].flags & FF_MARK);
 
         while (true) {
             if (sel >= 0 && mark_image(sel, on))
                 redraw();
-            XMaskEvent(win.env.dpy,
+            XMaskEvent(g_win.env.dpy,
                        ButtonPressMask | ButtonReleaseMask | PointerMotionMask, &e);
             if (e.type == ButtonPress || e.type == ButtonRelease)
                 break;
-            while (XCheckTypedEvent(win.env.dpy, MotionNotify, &e))
+            while (XCheckTypedEvent(g_win.env.dpy, MotionNotify, &e))
                 ;
-            sel = tns_translate(&tns, e.xbutton.x, e.xbutton.y);
+            sel = tns_translate(&g_tns, e.xbutton.x, e.xbutton.y);
         }
     }
 
@@ -456,20 +454,20 @@ bool ct_select(arg_t _)
     bool dirty = false;
     static Time firstclick;
 
-    if ((sel = tns_translate(&tns, xbutton_ev->x, xbutton_ev->y)) >= 0) {
-        if (sel != fileidx) {
-            tns_highlight(&tns, fileidx, false);
-            tns_highlight(&tns, sel, true);
-            fileidx = sel;
-            firstclick = xbutton_ev->time;
+    if ((sel = tns_translate(&g_tns, g_xbutton_ev->x, g_xbutton_ev->y)) >= 0) {
+        if (sel != g_fileidx) {
+            tns_highlight(&g_tns, g_fileidx, false);
+            tns_highlight(&g_tns, sel, true);
+            g_fileidx = sel;
+            firstclick = g_xbutton_ev->time;
             dirty = true;
-        } else if (xbutton_ev->time - firstclick <= TO_DOUBLE_CLICK) {
-            mode = MODE_IMAGE;
+        } else if (g_xbutton_ev->time - firstclick <= TO_DOUBLE_CLICK) {
+            g_mode = MODE_IMAGE;
             set_timeout(reset_cursor, TO_CURSOR_HIDE, true);
-            load_image(fileidx);
+            load_image(g_fileidx);
             dirty = true;
         } else {
-            firstclick = xbutton_ev->time;
+            firstclick = g_xbutton_ev->time;
         }
     }
 

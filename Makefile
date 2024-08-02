@@ -11,10 +11,9 @@ lib_fonts_1 = -lXft -lfontconfig
 lib_exif_0 =
 lib_exif_1 = -lexif
 
-nsxiv_cppflags = -D_XOPEN_SOURCE=700 \
+nsxiv_cflags = -D_XOPEN_SOURCE=700 \
   -DHAVE_LIBEXIF=$(HAVE_LIBEXIF) -DHAVE_LIBFONTS=$(HAVE_LIBFONTS) \
-  -DHAVE_INOTIFY=$(HAVE_INOTIFY) $(inc_fonts_$(HAVE_LIBFONTS)) \
-  $(CPPFLAGS)
+  -DHAVE_INOTIFY=$(HAVE_INOTIFY) $(inc_fonts_$(HAVE_LIBFONTS))
 
 nsxiv_ldlibs = -lImlib2 -lX11 \
   $(lib_exif_$(HAVE_LIBEXIF)) $(lib_fonts_$(HAVE_LIBFONTS)) \
@@ -33,14 +32,14 @@ all: nsxiv
 nsxiv: $(objects)
 	@echo "===> LD $@"
 	@echo $(objects)
-	$(CC) $(LDFLAGS) -o $@ $(objects) $(nsxiv_ldlibs)
+	$(CC) $(LDFLAGS) $(nsxiv_ldflags) -o $@ $(objects) $(nsxiv_ldlibs)
 
 $(build_dir):
 	@mkdir -p $(build_dir)
 
 $(build_dir)/%.o: $(src_dir)/%.c | $(build_dir)
 	@echo "===> CC $@"
-	$(CC) $(CFLAGS) $(nsxiv_cppflags) -c $< -o $@
+	$(CC) $(CFLAGS) $(nsxiv_cflags) -c $< -o $@
 
 
 $(objects): config.mk $(include_dir)/nsxiv.h $(include_dir)/config.h $(include_dir)/commands.h
@@ -143,9 +142,9 @@ compile_commands.json: $(sources)
 ctags: $(sources)
 	ctags -R
 
-.PHONY: dump_cppflags
-dump_cppflags:
-	@echo $(nsxiv_cppflags)
+.PHONY: dump_cflags
+dump_cflags:
+	@echo $(nsxiv_cflags)
 
 .PHONY: clean
 clean:
@@ -153,4 +152,15 @@ clean:
 	@rm -f ./nsxiv ./tags ./compile_commands.json
 	@echo "Cleaned!"
 
+.PHONY: lint
+lint: compile_commands.json
+	@# warning: Enable warning messages
+	@# style: Enable all coding style checks. Implies 'performance' and 'portability'
+	@# performance: Enable performance messages
+	@# portability: Enable portability messages
+	@# information: Enable information messages
+	@# unusedFunction: Check for unused functions.
+	@# missingInclude: Warn if there are missing includes
+	cppcheck --project=compile_commands.json --check-level=exhaustive --inline-suppr \
+		--enable=warning,style --platform=unix64 --language=c -j $(shell nproc)
 # }}}
