@@ -17,17 +17,19 @@
  * along with nsxiv.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "nsxiv.h"
-#include "version.h"
-#define INCLUDE_OPTIONS_CONFIG
-#include "config.h"
-
 #include <assert.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <stdbool.h>
+
+#include "version.h"
+#include "util.h"
+#include "cli_options.h"
+#define INCLUDE_OPTIONS_CONFIG
+#include "config.h"
 
 #define OPTPARSE_IMPLEMENTATION
 #define OPTPARSE_API static

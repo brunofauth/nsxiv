@@ -17,8 +17,6 @@
  * along with nsxiv.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "nsxiv.h"
-
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -30,8 +28,14 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "util.h"
+#include "cli_options.h"
+
+
+extern opt_t *options;
 extern char **environ;
 const char *progname = "nsxiv";
+
 
 void *emalloc(size_t size)
 {
@@ -43,6 +47,7 @@ void *emalloc(size_t size)
     return ptr;
 }
 
+
 void *ecalloc(size_t nmemb, size_t size)
 {
     void *ptr;
@@ -53,6 +58,7 @@ void *ecalloc(size_t nmemb, size_t size)
     return ptr;
 }
 
+
 void *erealloc(void *ptr, size_t size)
 {
     ptr = realloc(ptr, size);
@@ -61,11 +67,13 @@ void *erealloc(void *ptr, size_t size)
     return ptr;
 }
 
+
 char *estrdup(const char *s)
 {
     size_t n = strlen(s) + 1;
     return memcpy(emalloc(n), s, n);
 }
+
 
 void error(int eval, int err, const char *fmt, ...)
 {
@@ -88,6 +96,7 @@ void error(int eval, int err, const char *fmt, ...)
         exit(eval);
 }
 
+
 int r_opendir(r_dir_t *rdir, const char dirname[], bool recursive)
 {
     if (*dirname == '\0')
@@ -109,6 +118,7 @@ int r_opendir(r_dir_t *rdir, const char dirname[], bool recursive)
 
     return 0;
 }
+
 
 int r_closedir(r_dir_t *rdir)
 {
@@ -133,6 +143,7 @@ int r_closedir(r_dir_t *rdir)
 
     return ret;
 }
+
 
 char *r_readdir(r_dir_t *rdir, bool skip_dotfiles)
 {
@@ -190,6 +201,7 @@ char *r_readdir(r_dir_t *rdir, bool skip_dotfiles)
     return NULL;
 }
 
+
 int r_mkdir(char *path)
 {
     int rc = 0;
@@ -216,6 +228,7 @@ int r_mkdir(char *path)
     return rc;
 }
 
+
 void construct_argv(char **argv, unsigned int len, ...)
 {
     unsigned int i;
@@ -227,6 +240,7 @@ void construct_argv(char **argv, unsigned int len, ...)
     va_end(args);
     assert(argv[len - 1] == NULL && "argv should be NULL terminated");
 }
+
 
 static int mkspawn_pipe(posix_spawn_file_actions_t *fa, const char *cmd, int *pfd, int dupidx, int pipeflags)
 {
@@ -247,6 +261,7 @@ static int mkspawn_pipe(posix_spawn_file_actions_t *fa, const char *cmd, int *pf
     }
     return err ? -1 : 0;
 }
+
 
 pid_t spawn(int *readfd, int *writefd, int pipeflags, char *const argv[])
 {

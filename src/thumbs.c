@@ -17,11 +17,6 @@
  * along with nsxiv.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "nsxiv.h"
-#include <Imlib2.h>
-#define INCLUDE_THUMBS_CONFIG
-#include "config.h"
-
 #include <assert.h>
 #include <errno.h>
 #include <stdio.h>
@@ -30,6 +25,14 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <utime.h>
+#include <Imlib2.h>
+
+#include "image.h"
+#include "thumbs.h"
+#include "cli_options.h"
+#include "util.h"
+#define INCLUDE_THUMBS_CONFIG
+#include "config.h"
 
 #if HAVE_LIBEXIF
 #include <libexif/exif-data.h>
@@ -40,6 +43,7 @@ static char *g_cache_dir;
 static char *g_cache_tmpfile;
 static char *g_cache_tmpfile_base;
 static const char TMP_NAME[] = "/nsxiv-XXXXXX";
+extern opt_t *options;
 
 
 static char *tns_cache_translate_fp(const char filepath[])
@@ -158,7 +162,7 @@ float clamp(float n, float min, float max) {
     return t > max ? max : t;
 }
 
-void _transform_mark_color_modifier(tns_t *tns) {
+void _transform_mark_color_modifier(ThumbnailState *tns) {
     float af[256], rf[256], gf[256], bf[256];
     for (int i = 255; i >= 0; i--)
         rf [i] = gf [i] = bf [i] = af [i] = (float) i / 255;
@@ -178,14 +182,14 @@ void _transform_mark_color_modifier(tns_t *tns) {
             af[i] *= MCM_TINT[MCM_A];
 
     for (int i = 255; i != 0 ; i--) {
-        tns->mcm->r[i] = clamp(rf[i], 0, 1) * 255;
-        tns->mcm->g[i] = clamp(gf[i], 0, 1) * 255;
-        tns->mcm->b[i] = clamp(bf[i], 0, 1) * 255;
-        tns->mcm->a[i] = clamp(af[i], 0, 1) * 255;
+        tns->mark_cm->r[i] = clamp(rf[i], 0, 1) * 255;
+        tns->mark_cm->g[i] = clamp(gf[i], 0, 1) * 255;
+        tns->mark_cm->b[i] = clamp(bf[i], 0, 1) * 255;
+        tns->mark_cm->a[i] = clamp(af[i], 0, 1) * 255;
     }
 }
 
-void tns_init(tns_t *tns, fileinfo_t *tns_files, const int *thumbnail_count, int *sel, win_t *win)
+void tns_init(ThumbnailState *tns, fileinfo_t *tns_files, const int *thumbnail_count, int *sel, win_t *win)
 {
     tns->thumbs = (thumbnail_count == NULL || *thumbnail_count <= 0)
         ? NULL
@@ -202,10 +206,10 @@ void tns_init(tns_t *tns, fileinfo_t *tns_files, const int *thumbnail_count, int
     tns->zoom_level = THUMB_SIZE;
     tns_zoom(tns, 0);
 
-    markcolormod_t *table = emalloc(sizeof(markcolormod_t));
+    ColorModifier *table = emalloc(sizeof(*tns->mark_cm));
     for (int i = 255; i >= 0; i--)
         table->a[i] = table->r[i] = table->g[i] = table->b[i] = i;
-    tns->mcm = table;
+    tns->mark_cm = table;
     _transform_mark_color_modifier(tns);
 
     const char *homedir = getenv("XDG_CACHE_HOME");
@@ -226,7 +230,7 @@ void tns_init(tns_t *tns, fileinfo_t *tns_files, const int *thumbnail_count, int
     g_cache_tmpfile_base = g_cache_tmpfile + len - 1;
 }
 
-CLEANUP void tns_free(tns_t *tns)
+CLEANUP void tns_free(ThumbnailState *tns)
 {
     if (tns->thumbs != NULL) {
         for (int32_t i = 0; i < *tns->cnt; i++)
@@ -235,22 +239,22 @@ CLEANUP void tns_free(tns_t *tns)
         tns->thumbs = NULL;
     }
 
-    free(tns->mcm);
+    free(tns->mark_cm);
     free(g_cache_dir);
     g_cache_dir = NULL;
     free(g_cache_tmpfile);
     g_cache_tmpfile = g_cache_tmpfile_base = NULL;
 }
 
-CLEANUP void tns_replace(tns_t *tns, fileinfo_t *tns_files, const int *cnt, int *sel, win_t *win, replaceflags_t flags)
+CLEANUP void tns_replace(ThumbnailState *tns, fileinfo_t *tns_files, const int *cnt, int *sel, win_t *win, replaceflags_t flags)
 {
     int zoom_level = THUMB_SIZE;
     if (flags & RF_KEEP_ZOOM_LEVEL)
         zoom_level = tns->zoom_level;
-    markcolormod_t *mark_mod = NULL;
+    ColorModifier *mark_mod = NULL;
     if (flags & RF_KEEP_MARK_COLOR_MOD) {
-        mark_mod = tns->mcm;
-        tns->mcm = NULL;
+        mark_mod = tns->mark_cm;
+        tns->mark_cm = NULL;
     }
 
     tns_free(tns);
@@ -271,12 +275,12 @@ CLEANUP void tns_replace(tns_t *tns, fileinfo_t *tns_files, const int *cnt, int 
     tns_zoom(tns, 0);
 
     if (mark_mod != NULL) {
-        tns->mcm = mark_mod;
+        tns->mark_cm = mark_mod;
     } else {
-        markcolormod_t *table = emalloc(sizeof(markcolormod_t));
+        ColorModifier *table = emalloc(sizeof(ColorModifier));
         for (int i = 255; i >= 0; i--)
             table->a[i] = table->r[i] = table->g[i] = table->b[i] = i;
-        tns->mcm = table;
+        tns->mark_cm = table;
         _transform_mark_color_modifier(tns);
     }
 
@@ -328,7 +332,7 @@ static Imlib_Image tns_scale_down(Imlib_Image im, int max_side_size)
 
 // Besides loading thumbnails, this function also advances `next_to_init` and `next_to_load_in_view`
 // Returns true if thumbnail was successfully loaded
-bool tns_load(tns_t *tns, int n, bool force, bool cache_only)
+bool tns_load(ThumbnailState *tns, int n, bool force, bool cache_only)
 {
     if (n < 0 || n >= *tns->cnt)
         return false;
@@ -466,7 +470,7 @@ bool tns_load(tns_t *tns, int n, bool force, bool cache_only)
     return true;
 }
 
-void tns_unload(tns_t *tns, int n)
+void tns_unload(ThumbnailState *tns, int n)
 {
     thumb_t *t;
 
@@ -477,7 +481,7 @@ void tns_unload(tns_t *tns, int n)
     t->im = NULL;
 }
 
-static void tns_check_view(tns_t *tns, const bool scrolled)
+static void tns_check_view(ThumbnailState *tns, const bool scrolled)
 {
     assert(tns != NULL);
     tns->visible_thumbs.start -= tns->visible_thumbs.start % tns->cols;
@@ -501,7 +505,7 @@ static void tns_check_view(tns_t *tns, const bool scrolled)
     }
 }
 
-void tns_render(tns_t *tns)
+void tns_render(ThumbnailState *tns)
 {
     if (!tns->dirty)
         return;
@@ -591,7 +595,7 @@ void tns_render(tns_t *tns)
 
 // Imlib has actual filters, but I couldn't figure out how they work, so I just
 // reimplemented that functionality (probably in a worse way)
-Imlib_Image apply_filters(Imlib_Image src, markcolormod_t *table) {
+Imlib_Image apply_filters(Imlib_Image src, ColorModifier *table) {
     imlib_context_set_image(src);
     Imlib_Image clone;
     if (!(clone = imlib_clone_image()))
@@ -607,7 +611,7 @@ Imlib_Image apply_filters(Imlib_Image src, markcolormod_t *table) {
     return clone;
 }
 
-void tns_mark(tns_t *tns, int n, bool mark)
+void tns_mark(ThumbnailState *tns, int n, bool mark)
 {
     if (n < 0 || n >= *tns->cnt || tns->thumbs[n].im == NULL)
         return;
@@ -616,7 +620,7 @@ void tns_mark(tns_t *tns, int n, bool mark)
     Imlib_Image filtered = NULL;
 
     if (mark) {
-        filtered = apply_filters(thumbnail->im, tns->mcm);
+        filtered = apply_filters(thumbnail->im, tns->mark_cm);
         imlib_context_set_image(filtered);
     } else {
         imlib_context_set_image(thumbnail->im);
@@ -657,7 +661,7 @@ void tns_mark(tns_t *tns, int n, bool mark)
         free(filtered);
 }
 
-void tns_highlight(tns_t *tns, int n, bool hl)
+void tns_highlight(ThumbnailState *tns, int n, bool hl)
 {
     if (n < 0 || n >= *tns->cnt || tns->thumbs[n].im == NULL)
         return;
@@ -691,7 +695,7 @@ void tns_highlight(tns_t *tns, int n, bool hl)
     }
 }
 
-bool tns_move_selection(tns_t *tns, const direction_t dir, int cnt)
+bool tns_move_selection(ThumbnailState *tns, const direction_t dir, int cnt)
 {
     int max;
 
@@ -724,7 +728,7 @@ bool tns_move_selection(tns_t *tns, const direction_t dir, int cnt)
     return *tns->sel != old;
 }
 
-bool tns_scroll(tns_t *tns, const direction_t dir, const bool whole_screen)
+bool tns_scroll(ThumbnailState *tns, const direction_t dir, const bool whole_screen)
 {
     int old_visible_thumb_start = tns->visible_thumbs.start;
     int d = tns->cols * (whole_screen ? tns->rows : 1);
@@ -745,7 +749,7 @@ bool tns_scroll(tns_t *tns, const direction_t dir, const bool whole_screen)
     return tns->visible_thumbs.start != old_visible_thumb_start;
 }
 
-bool tns_zoom(tns_t *tns, const int d)
+bool tns_zoom(ThumbnailState *tns, const int d)
 {
     int old_zoom_level = tns->zoom_level;
     tns->zoom_level += -(d < 0) + (d > 0);
@@ -765,7 +769,7 @@ bool tns_zoom(tns_t *tns, const int d)
     return tns->zoom_level != old_zoom_level;
 }
 
-int tns_translate(tns_t *tns, const int x, const int y)
+int tns_translate(ThumbnailState *tns, const int x, const int y)
 {
     if (x < tns->x || y < tns->y)
         return -1;

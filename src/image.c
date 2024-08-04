@@ -17,9 +17,11 @@
  * along with nsxiv.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "nsxiv.h"
 #define INCLUDE_IMAGE_CONFIG
 #include "config.h"
+#include "image.h"
+#include "cli_options.h"
+#include "util.h"
 
 #include <assert.h>
 #include <errno.h>
@@ -40,6 +42,10 @@ enum { DEF_ANIM_DELAY = 75 };
 #define ZOOM_MIN (zoom_levels[0] / 100)
 #define ZOOM_MAX (zoom_levels[ARRLEN(zoom_levels) - 1] / 100)
 
+
+extern opt_t *options;
+
+
 static int calc_cache_size(void)
 {
     long cache, pages = -1, page_size = -1;
@@ -59,7 +65,7 @@ static int calc_cache_size(void)
     return MIN(cache, CACHE_SIZE_LIMIT);
 }
 
-void img_init(img_t *img, win_t *win)
+void img_init(SxivImage *img, win_t *win)
 {
     imlib_context_set_display(win->env.dpy);
     imlib_context_set_visual(win->env.vis);
@@ -144,13 +150,13 @@ static void img_area_clear(int x, int y, int w, int h)
     imlib_image_fill_rectangle(x, y, w, h);
 }
 
-static bool img_load_multiframe(img_t *img, const fileinfo_t *file)
+static bool img_load_multiframe(SxivImage *img, const fileinfo_t *file)
 {
     unsigned int n, fcnt;
     Imlib_Image blank;
     Imlib_Frame_Info finfo;
     int px, py, pw, ph, pflag;
-    multi_img_t *m = &img->multi;
+    ImageFrameSet *m = &img->multi;
 
     imlib_context_set_image(img->im);
     imlib_image_get_frame_info(&finfo);
@@ -278,7 +284,7 @@ Imlib_Image img_open(const fileinfo_t *file)
     return im;
 }
 
-bool img_load(img_t *img, const fileinfo_t *file)
+bool img_load(SxivImage *img, const fileinfo_t *file)
 {
     const char *fmt;
     bool animated = false;
@@ -332,7 +338,7 @@ CLEANUP void img_free(Imlib_Image im, const bool decache)
     }
 }
 
-CLEANUP void img_close(img_t *img, const bool decache)
+CLEANUP void img_close(SxivImage *img, const bool decache)
 {
     unsigned int i;
 
@@ -363,7 +369,7 @@ CLEANUP void img_close(img_t *img, const bool decache)
     }
 }
 
-static void img_check_pan(img_t *img, const bool moved)
+static void img_check_pan(SxivImage *img, const bool moved)
 {
     const win_t *win = img->win;
     const float w = img->w * img->zoom;
@@ -389,7 +395,7 @@ static void img_check_pan(img_t *img, const bool moved)
         img->dirty = true;
 }
 
-static bool img_fit(img_t *img)
+static bool img_fit(SxivImage *img)
 {
     float z, zw, zh;
 
@@ -424,7 +430,7 @@ static bool img_fit(img_t *img)
     }
 }
 
-void img_render(img_t *img)
+void img_render(SxivImage *img)
 {
     img_fit(img);
 
@@ -518,7 +524,7 @@ fallback:
     img->dirty = false;
 }
 
-bool img_fit_win(img_t *img, scalemode_t sm)
+bool img_fit_win(SxivImage *img, scalemode_t sm)
 {
     float oz;
 
@@ -535,7 +541,7 @@ bool img_fit_win(img_t *img, scalemode_t sm)
     }
 }
 
-bool img_zoom_to(img_t *img, float z)
+bool img_zoom_to(SxivImage *img, float z)
 {
     int x, y;
     if (ZOOM_MIN <= z && z <= ZOOM_MAX) {
@@ -557,7 +563,7 @@ bool img_zoom_to(img_t *img, float z)
     }
 }
 
-bool img_zoom(img_t *img, int d)
+bool img_zoom(SxivImage *img, int d)
 {
     int i = d > 0 ? 0 : (int)ARRLEN(zoom_levels) - 1;
     while (i >= 0 && i < (int)ARRLEN(zoom_levels) &&
@@ -569,7 +575,7 @@ bool img_zoom(img_t *img, int d)
     return img_zoom_to(img, zoom_levels[i] / 100);
 }
 
-bool img_pos(img_t *img, float x, float y)
+bool img_pos(SxivImage *img, float x, float y)
 {
     float ox, oy;
 
@@ -589,12 +595,12 @@ bool img_pos(img_t *img, float x, float y)
     }
 }
 
-static bool img_move(img_t *img, float dx, float dy)
+static bool img_move(SxivImage *img, float dx, float dy)
 {
     return img_pos(img, img->x + dx, img->y + dy);
 }
 
-bool img_pan(img_t *img, direction_t dir, int d)
+bool img_pan(SxivImage *img, direction_t dir, int d)
 {
     /* d < 0: screen-wise
      * d = 0: 1/PAN_FRACTION of screen
@@ -622,7 +628,7 @@ bool img_pan(img_t *img, direction_t dir, int d)
     return false;
 }
 
-bool img_pan_center(img_t *img)
+bool img_pan_center(SxivImage *img)
 {
     float x, y;
     x = (img->win->w - img->w * img->zoom) / 2.0;
@@ -630,7 +636,7 @@ bool img_pan_center(img_t *img)
     return img_pos(img, x, y);
 }
 
-bool img_pan_edge(img_t *img, direction_t dir)
+bool img_pan_edge(SxivImage *img, direction_t dir)
 {
     float ox, oy;
 
@@ -656,7 +662,7 @@ bool img_pan_edge(img_t *img, direction_t dir)
     }
 }
 
-void img_rotate(img_t *img, degree_t d)
+void img_rotate(SxivImage *img, degree_t d)
 {
     imlib_context_set_image(img->im);
     imlib_image_orientate(d);
@@ -682,7 +688,7 @@ void img_rotate(img_t *img, degree_t d)
     img->dirty = true;
 }
 
-void img_flip(img_t *img, flipdir_t d)
+void img_flip(SxivImage *img, flipdir_t d)
 {
     unsigned int i;
     void (*imlib_flip_op[3])(void) = {
@@ -708,7 +714,7 @@ void img_flip(img_t *img, flipdir_t d)
     img->dirty = true;
 }
 
-void img_toggle_antialias(img_t *img)
+void img_toggle_antialias(SxivImage *img)
 {
     img->anti_alias = !img->anti_alias;
     imlib_context_set_image(img->im);
@@ -721,7 +727,7 @@ static double steps_to_range(int d, double max, double offset)
     return offset + d * ((d <= 0 ? 1.0 : (max - 1.0)) / CC_STEPS);
 }
 
-void img_update_color_modifiers(img_t *img)
+void img_update_color_modifiers(SxivImage *img)
 {
     assert(imlib_context_get_color_modifier() == img->cmod);
     imlib_reset_color_modifier();
@@ -736,7 +742,7 @@ void img_update_color_modifiers(img_t *img)
     img->dirty = true;
 }
 
-bool img_change_color_modifier(img_t *img, int d, int *target)
+bool img_change_color_modifier(SxivImage *img, int d, int *target)
 {
     int value = d == 0 ? 0 : MIN(MAX(*target + d, -CC_STEPS), CC_STEPS);
 
@@ -748,7 +754,7 @@ bool img_change_color_modifier(img_t *img, int d, int *target)
     return true;
 }
 
-static bool img_frame_goto(img_t *img, int n)
+static bool img_frame_goto(SxivImage *img, int n)
 {
     if (n < 0 || (unsigned int)n >= img->multi.cnt || (unsigned int)n == img->multi.sel)
         return false;
@@ -765,7 +771,7 @@ static bool img_frame_goto(img_t *img, int n)
     return true;
 }
 
-bool img_frame_navigate(img_t *img, int d)
+bool img_frame_navigate(SxivImage *img, int d)
 {
     if (img->multi.cnt == 0 || d == 0)
         return false;
@@ -776,7 +782,7 @@ bool img_frame_navigate(img_t *img, int d)
     return img_frame_goto(img, d);
 }
 
-bool img_frame_animate(img_t *img)
+bool img_frame_animate(SxivImage *img)
 {
     if (img->multi.cnt > 0)
         return img_frame_goto(img, (img->multi.sel + 1) % img->multi.cnt);

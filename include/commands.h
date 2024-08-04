@@ -1,55 +1,81 @@
+// vim: foldmethod=marker foldlevel=0
 #ifndef COMMANDS_H
 #define COMMANDS_H
-#include <stdbool.h>
 
-/* global */
-bool cg_change_gamma(arg_t);
-bool cg_change_brightness(arg_t);
-bool cg_change_contrast(arg_t);
-bool cg_first(arg_t);
-bool cg_mark_range(arg_t);
-bool cg_n_or_last(arg_t);
-bool cg_navigate_marked(arg_t);
-bool cg_prefix_external(arg_t);
-bool cg_quit(arg_t);
-bool cg_pick_quit(arg_t);
-bool cg_reload_image(arg_t);
-bool cg_remove_image(arg_t);
-bool cg_reverse_marks(arg_t);
-bool cg_scroll_screen(arg_t);
-bool cg_switch_mode(arg_t);
-bool cg_toggle_bar(arg_t);
-bool cg_toggle_fullscreen(arg_t);
-bool cg_toggle_image_mark(arg_t);
-bool cg_unmark_all(arg_t);
-bool cg_zoom(arg_t);
-/* image mode */
-bool ci_alternate(arg_t);
-bool ci_cursor_navigate(arg_t);
-bool ci_drag(arg_t);
-bool ci_fit_to_win(arg_t);
-bool ci_flip(arg_t);
-bool ci_navigate(arg_t);
-bool ci_navigate_frame(arg_t);
-bool ci_rotate(arg_t);
-bool ci_scroll(arg_t);
-bool ci_scroll_to_center(arg_t);
-bool ci_scroll_to_edge(arg_t);
-bool ci_set_zoom(arg_t);
-bool ci_slideshow(arg_t);
-bool ci_toggle_alpha(arg_t);
-bool ci_toggle_animation(arg_t);
-bool ci_toggle_antialias(arg_t);
-/* thumbnails mode */
-bool ct_move_sel(arg_t);
-bool ct_reload_all(arg_t);
-bool ct_scroll(arg_t);
-bool ct_drag_mark_image(arg_t);
-bool ct_select(arg_t);
-bool ct_toggle_squared(arg_t);
+#include <stdbool.h>
+#include <X11/Xlib.h>
+#include "nsxiv.h"
+
+
+typedef int CommandArg;
+typedef bool (*CommandFp)(CommandArg);
+
+typedef struct {
+    CommandFp func;
+    appmode_t mode;
+} Command;
+
+typedef struct {
+    unsigned int mask;
+    KeySym ksym_or_button;
+    Command cmd;
+    CommandArg arg;
+} keymap_t;
+
+typedef keymap_t button_t;
+
+
+// global {{{1
+bool cg_change_gamma(CommandArg);
+bool cg_change_brightness(CommandArg);
+bool cg_change_contrast(CommandArg);
+bool cg_first(CommandArg);
+bool cg_mark_range(CommandArg);
+bool cg_n_or_last(CommandArg);
+bool cg_navigate_marked(CommandArg);
+bool cg_prefix_external(CommandArg);
+bool cg_quit(CommandArg);
+bool cg_pick_quit(CommandArg);
+bool cg_reload_image(CommandArg);
+bool cg_remove_image(CommandArg);
+bool cg_reverse_marks(CommandArg);
+bool cg_scroll_screen(CommandArg);
+bool cg_switch_mode(CommandArg);
+bool cg_toggle_bar(CommandArg);
+bool cg_toggle_fullscreen(CommandArg);
+bool cg_toggle_image_mark(CommandArg);
+bool cg_unmark_all(CommandArg);
+bool cg_zoom(CommandArg);
+// image mode {{{1
+bool ci_alternate(CommandArg);
+bool ci_cursor_navigate(CommandArg);
+bool ci_drag(CommandArg);
+bool ci_fit_to_win(CommandArg);
+bool ci_flip(CommandArg);
+bool ci_navigate(CommandArg);
+bool ci_navigate_frame(CommandArg);
+bool ci_rotate(CommandArg);
+bool ci_scroll(CommandArg);
+bool ci_scroll_to_center(CommandArg);
+bool ci_scroll_to_edge(CommandArg);
+bool ci_set_zoom(CommandArg);
+bool ci_slideshow(CommandArg);
+bool ci_toggle_alpha(CommandArg);
+bool ci_toggle_animation(CommandArg);
+bool ci_toggle_antialias(CommandArg);
+// thumbnails mode {{{1
+bool ct_move_sel(CommandArg);
+bool ct_reload_all(CommandArg);
+bool ct_scroll(CommandArg);
+bool ct_drag_mark_image(CommandArg);
+bool ct_select(CommandArg);
+bool ct_toggle_squared(CommandArg);
+// }}}
+
 
 #ifdef INCLUDE_MAPPINGS_CONFIG
-/* global */
+
+// global {{{1
 #define g_change_gamma { cg_change_gamma, MODE_ALL }
 #define g_change_brightness { cg_change_brightness, MODE_ALL }
 #define g_change_contrast { cg_change_contrast, MODE_ALL }
@@ -71,7 +97,7 @@ bool ct_toggle_squared(arg_t);
 #define g_unmark_all { cg_unmark_all, MODE_ALL }
 #define g_zoom { cg_zoom, MODE_ALL }
 
-/* image mode */
+// image mode {{{1
 #define i_alternate { ci_alternate, MODE_IMAGE }
 #define i_cursor_navigate { ci_cursor_navigate, MODE_IMAGE }
 #define i_drag { ci_drag, MODE_IMAGE }
@@ -89,13 +115,16 @@ bool ct_toggle_squared(arg_t);
 #define i_toggle_animation { ci_toggle_animation, MODE_IMAGE }
 #define i_toggle_antialias { ci_toggle_antialias, MODE_IMAGE }
 
-/* thumbnails mode */
+// thumbnails mode {{{1
 #define t_move_sel { ct_move_sel, MODE_THUMB }
 #define t_reload_all { ct_reload_all, MODE_THUMB }
 #define t_scroll { ct_scroll, MODE_THUMB }
 #define t_drag_mark_image { ct_drag_mark_image, MODE_THUMB }
 #define t_select { ct_select, MODE_THUMB }
 #define t_toggle_squared { ct_toggle_squared, MODE_THUMB }
+// }}}
 
-#endif /* _MAPPINGS_CONFIG */
-#endif /* COMMANDS_H */
+#endif // INCLUDE_MAPPINGS_CONFIG
+
+
+#endif // COMMANDS_H

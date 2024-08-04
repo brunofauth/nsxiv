@@ -17,11 +17,6 @@
  * along with nsxiv.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "nsxiv.h"
-#define INCLUDE_WINDOW_CONFIG
-#include "config.h"
-#include "icon_data.h"
-
 #include <assert.h>
 #include <locale.h>
 #include <stdlib.h>
@@ -31,6 +26,13 @@
 #include <X11/Xatom.h>
 #include <X11/Xresource.h>
 #include <X11/cursorfont.h>
+
+#include "window.h"
+#include "icon_data.h"
+#include "cli_options.h"
+#include "util.h"
+#define INCLUDE_WINDOW_CONFIG
+#include "config.h"
 
 #if HAVE_LIBFONTS
 #include "utf8.h"
@@ -42,6 +44,10 @@
 #define RES_CLASS "Nsxiv"
 #define INIT_ATOM_(atom) \
     atoms[ATOM_##atom] = XInternAtom(e->dpy, #atom, False);
+
+
+extern opt_t *options;
+
 
 enum {
     H_TEXT_PAD = 5,

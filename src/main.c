@@ -17,11 +17,6 @@
  * along with nsxiv.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "nsxiv.h"
-#define INCLUDE_MAPPINGS_CONFIG
-#include "commands.h"
-#include "config.h"
-
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -42,6 +37,17 @@
 #include <X11/XF86keysym.h>
 #include <X11/keysym.h>
 
+#include "autoreload.h"
+#include "image.h"
+#include "thumbs.h"
+#include "window.h"
+#include "cli_options.h"
+#include "util.h"
+
+#define INCLUDE_MAPPINGS_CONFIG
+#include "commands.h"
+#include "config.h"
+
 #define MODMASK(mask) (USED_MODMASK & (mask))
 #define BAR_SEP "  "
 
@@ -53,16 +59,19 @@
         (tv)->tv_usec += (t) % 1000 * 1000; \
     } while (0)
 
+
 typedef struct {
     int err;
     char *cmd;
 } extcmd_t;
 
-/* these are not declared in nsxiv.h, as it causes too many -Wshadow warnings */
-arl_t g_state_autoreload;
-img_t g_img;
-tns_t g_tns;
+
+AutoreloadState g_state_autoreload;
+SxivImage g_img;
+ThumbnailState g_tns;
 win_t g_win;
+extern opt_t *options;
+
 
 appmode_t g_mode;
 fileinfo_t *g_files;
@@ -114,6 +123,7 @@ static void cleanup(void)
     win_close(&g_win);
 }
 
+
 static bool xgetline(char **lineptr, size_t *n)
 {
     ssize_t len = getdelim(lineptr, n, options->using_null ? '\0' : '\n', stdin);
@@ -122,10 +132,12 @@ static bool xgetline(char **lineptr, size_t *n)
     return len > 0;
 }
 
+
 static int fncmp(const void *a, const void *b)
 {
     return strcoll(((fileinfo_t *)a)->name, ((fileinfo_t *)b)->name);
 }
+
 
 static void check_add_file(const char *filename, bool given)
 {
@@ -155,6 +167,7 @@ static void check_add_file(const char *filename, bool given)
     g_fileidx++;
 }
 
+
 static void add_entry(const char *entry_name)
 {
     int start;
@@ -183,6 +196,7 @@ static void add_entry(const char *entry_name)
             qsort(g_files + start, g_fileidx - start, sizeof(*g_files), fncmp);
     }
 }
+
 
 void remove_file(int n, bool manual)
 {
@@ -220,6 +234,7 @@ void remove_file(int n, bool manual)
         g_markidx--;
 }
 
+
 void set_timeout(timeout_f handler, int time, bool overwrite)
 {
     unsigned int i;
@@ -236,6 +251,7 @@ void set_timeout(timeout_f handler, int time, bool overwrite)
     }
 }
 
+
 void reset_timeout(timeout_f handler)
 {
     unsigned int i;
@@ -247,6 +263,7 @@ void reset_timeout(timeout_f handler)
         }
     }
 }
+
 
 static bool check_timeouts(int *t)
 {
@@ -283,6 +300,7 @@ static bool check_timeouts(int *t)
     return tmin != INT_MAX;
 }
 
+
 static void autoreload(void)
 {
     if (g_img.autoreload_pending) {
@@ -295,6 +313,7 @@ static void autoreload(void)
     }
 }
 
+
 static void kill_close(pid_t pid, int *fd)
 {
     if (fd != NULL && *fd != -1) {
@@ -304,10 +323,12 @@ static void kill_close(pid_t pid, int *fd)
     }
 }
 
+
 static void close_title(void)
 {
     kill_close(wintitle.pid, &wintitle.fd);
 }
+
 
 static void read_title(void)
 {
@@ -320,6 +341,7 @@ static void read_title(void)
     }
     close_title();
 }
+
 
 static void open_title(void)
 {
@@ -342,10 +364,12 @@ static void open_title(void)
     wintitle.pid = spawn(&wintitle.fd, NULL, O_NONBLOCK, argv);
 }
 
+
 void close_info(void)
 {
     kill_close(info.pid, &info.fd);
 }
+
 
 void open_info(void)
 {
@@ -365,6 +389,7 @@ void open_info(void)
     info.pid = spawn(&info.fd, NULL, O_NONBLOCK, argv);
 }
 
+
 static void read_info(void)
 {
     ssize_t n = read(info.fd, g_win.bar.l.buf, g_win.bar.l.size - 1);
@@ -381,6 +406,7 @@ static void read_info(void)
     win_draw(&g_win);
     close_info();
 }
+
 
 void load_image(int new)
 {
@@ -419,6 +445,7 @@ void load_image(int new)
         reset_timeout(animate);
 }
 
+
 bool mark_image(int n, bool on)
 {
     g_markidx = n;
@@ -432,6 +459,7 @@ bool mark_image(int n, bool on)
     return false;
 }
 
+
 static void bar_put(win_bar_t *bar, const char *fmt, ...)
 {
     size_t len = bar->size - (bar->p - bar->buf), n;
@@ -442,6 +470,7 @@ static void bar_put(win_bar_t *bar, const char *fmt, ...)
     bar->p += MIN(len, n);
     va_end(ap);
 }
+
 
 static void update_info(void)
 {
@@ -518,6 +547,7 @@ static void update_info(void)
     }
 }
 
+
 int nav_button(void)
 {
     int x, y, nw;
@@ -535,6 +565,7 @@ int nav_button(void)
         return 1;
     return 2;
 }
+
 
 void redraw(void)
 {
@@ -554,6 +585,7 @@ void redraw(void)
     reset_timeout(redraw);
     reset_cursor();
 }
+
 
 void reset_cursor(void)
 {
@@ -579,6 +611,7 @@ void reset_cursor(void)
     win_set_cursor(&g_win, cursor);
 }
 
+
 void animate(void)
 {
     if (img_frame_animate(&g_img)) {
@@ -587,21 +620,25 @@ void animate(void)
     }
 }
 
+
 void slideshow(void)
 {
     load_image(g_fileidx + 1 < g_filecnt ? g_fileidx + 1 : 0);
     redraw();
 }
 
+
 void clear_resize(void)
 {
     resized = false;
 }
 
+
 static Bool is_input_ev(Display *dpy, XEvent *ev, XPointer arg)
 {
     return ev->type == ButtonPress || ev->type == KeyPress;
 }
+
 
 void handle_key_handler(bool init)
 {
@@ -617,6 +654,7 @@ void handle_key_handler(bool init)
     }
     win_draw(&g_win);
 }
+
 
 static bool run_key_handler(const char *key, unsigned int mask)
 {
@@ -700,6 +738,7 @@ static bool run_key_handler(const char *key, unsigned int mask)
     return true;
 }
 
+
 static bool process_bindings(const keymap_t *bindings, unsigned int len, KeySym ksym_or_button,
                              unsigned int state, unsigned int implicit_mod)
 {
@@ -718,6 +757,7 @@ static bool process_bindings(const keymap_t *bindings, unsigned int len, KeySym 
     }
     return dirty;
 }
+
 
 static void on_keypress(XKeyEvent *kev)
 {
@@ -756,6 +796,7 @@ static void on_keypress(XKeyEvent *kev)
     g_prefix = 0;
 }
 
+
 static void on_buttonpress(const XButtonEvent *bev)
 {
     bool dirty = false;
@@ -771,6 +812,7 @@ static void on_buttonpress(const XButtonEvent *bev)
         redraw();
     g_prefix = 0;
 }
+
 
 static void run(void)
 {
@@ -891,6 +933,7 @@ static void run(void)
     }
 }
 
+
 static void setup_signal(int sig, void (*handler)(int sig), int flags)
 {
     struct sigaction sa;
@@ -901,6 +944,7 @@ static void setup_signal(int sig, void (*handler)(int sig), int flags)
     if (sigaction(sig, &sa, NULL) < 0)
         error(EXIT_FAILURE, errno, "signal %d", sig);
 }
+
 
 int main(int argc, char *argv[])
 {
