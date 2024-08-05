@@ -17,6 +17,15 @@
  * along with nsxiv.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "thumbs.h"
+
+#include "cli_options.h"
+#include "image.h"
+#include "util.h"
+#define INCLUDE_THUMBS_CONFIG
+#include "config.h"
+
+#include <Imlib2.h>
 #include <assert.h>
 #include <errno.h>
 #include <stdio.h>
@@ -25,14 +34,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <utime.h>
-#include <Imlib2.h>
-
-#include "image.h"
-#include "thumbs.h"
-#include "cli_options.h"
-#include "util.h"
-#define INCLUDE_THUMBS_CONFIG
-#include "config.h"
 
 #if HAVE_LIBEXIF
 #include <libexif/exif-data.h>

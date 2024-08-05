@@ -17,20 +17,10 @@
  * along with nsxiv.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <assert.h>
-#include <locale.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-
-#include <X11/Xatom.h>
-#include <X11/Xresource.h>
-#include <X11/cursorfont.h>
-
-#include "window.h"
-#include "icon_data.h"
 #include "cli_options.h"
+#include "icon_data.h"
 #include "util.h"
+#include "window.h"
 #define INCLUDE_WINDOW_CONFIG
 #include "config.h"
 
@@ -40,6 +30,16 @@
 #define TEXTWIDTH(win, text, len) \
     win_draw_text(win, NULL, NULL, 0, 0, text, len, 0)
 #endif
+
+#include <assert.h>
+#include <locale.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+#include <X11/Xatom.h>
+#include <X11/Xresource.h>
+#include <X11/cursorfont.h>
 
 #define RES_CLASS "Nsxiv"
 #define INIT_ATOM_(atom) \

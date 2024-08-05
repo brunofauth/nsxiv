@@ -17,11 +17,12 @@
  * along with nsxiv.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#define INCLUDE_IMAGE_CONFIG
-#include "config.h"
 #include "image.h"
+
 #include "cli_options.h"
 #include "util.h"
+#define INCLUDE_IMAGE_CONFIG
+#include "config.h"
 
 #include <assert.h>
 #include <errno.h>

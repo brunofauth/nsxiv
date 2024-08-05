@@ -21,15 +21,15 @@
 
 #if HAVE_INOTIFY
 
+#include "autoreload.h"
+#include "util.h"
+
 #include <assert.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/inotify.h>
 #include <unistd.h>
-
-#include "autoreload.h"
-#include "util.h"
 
 
 static struct {

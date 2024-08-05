@@ -10,4 +10,24 @@ CompileFlags:
     # - -DINCLUDE_OPTIONS_CONFIG
     # - -DINCLUDE_THUMBS_CONFIG
     # - -DINCLUDE_MAPPINGS_CONFIG
+  Remove:
+    - -fanalyzer
 
+Diagnostics:
+  ClangTidy:
+    Add:
+      - bugprone-*
+      # - cert-*
+      # - concurrency-*
+      - linuxkernel-*
+      - llvm-*
+      - misc-*
+      - performance-*
+      # - readability-*
+      - portability-*
+    Remove:
+      - bugprone-assignment-in-if-condition
+      - bugprone-easily-swappable-parameters
+      - bugprone-narrowing-conversions
+      # - llvm-include-order
+      - misc-unused-parameters

@@ -17,6 +17,9 @@
  * along with nsxiv.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "util.h"
+#include "cli_options.h"
+
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -27,9 +30,6 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
-
-#include "util.h"
-#include "cli_options.h"
 
 
 extern opt_t *g_options;

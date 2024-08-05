@@ -17,17 +17,10 @@
  * along with nsxiv.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <assert.h>
-#include <limits.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <stdbool.h>
-
-#include "version.h"
-#include "util.h"
 #include "cli_options.h"
+
+#include "util.h"
+#include "version.h"
 #define INCLUDE_OPTIONS_CONFIG
 #include "config.h"
 
@@ -38,6 +31,15 @@
 #pragma GCC diagnostic ignored "-Wunused-function"
 #include "optparse.h"
 #pragma GCC diagnostic pop
+
+#include <assert.h>
+#include <limits.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
 
 const opt_t *g_options;
 

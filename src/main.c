@@ -17,6 +17,17 @@
  * along with nsxiv.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "autoreload.h"
+#include "cli_options.h"
+#include "image.h"
+#include "thumbs.h"
+#include "util.h"
+#include "window.h"
+
+#define INCLUDE_MAPPINGS_CONFIG
+#include "commands.h"
+#include "config.h"
+
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -36,17 +47,6 @@
 
 #include <X11/XF86keysym.h>
 #include <X11/keysym.h>
-
-#include "autoreload.h"
-#include "image.h"
-#include "thumbs.h"
-#include "window.h"
-#include "cli_options.h"
-#include "util.h"
-
-#define INCLUDE_MAPPINGS_CONFIG
-#include "commands.h"
-#include "config.h"
 
 #define MODMASK(mask) (USED_MODMASK & (mask))
 #define BAR_SEP "  "
@@ -634,6 +634,7 @@ void clear_resize(void)
 }
 
 
+// cppcheck-suppress constParameterCallback
 static Bool is_input_ev(Display *dpy, XEvent *ev, XPointer arg)
 {
     return ev->type == ButtonPress || ev->type == KeyPress;

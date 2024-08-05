@@ -19,10 +19,11 @@
 
 
 #include "commands.h"
+
+#include "cli_options.h"
 #include "image.h"
 #include "nsxiv.h"
 #include "thumbs.h"
-#include "cli_options.h"
 #include "util.h"
 
 #include <stdio.h>
@@ -45,9 +46,11 @@ static bool navigate_to(CommandArg n)
 
     switch (g_mode) {
         case MODE_ALL: error_quit(EXIT_FAILURE, 0, "unexpected mode 'ALL'");
-        case MODE_IMAGE: load_image(n); return true;
-        case MODE_THUMB: g_fileidx = n; g_tns.dirty = true; return true;
+        case MODE_IMAGE: load_image(n); break;
+        case MODE_THUMB: g_fileidx = n; g_tns.dirty = true; break;
     }
+
+    return true;
 }
 
 
@@ -60,7 +63,6 @@ bool cg_quit(CommandArg status)
         }
     }
     exit(status);
-    return None; /* silence tcc warning */
 }
 
 
@@ -68,7 +70,7 @@ bool cg_pick_quit(CommandArg status)
 {
     if (g_options->to_stdout && g_markcnt == 0)
         printf("%s%c", g_files[g_fileidx].name, g_options->using_null ? '\0' : '\n');
-    return cg_quit(status);
+    cg_quit(status);
 }
 
 
@@ -89,14 +91,14 @@ bool cg_switch_mode(CommandArg _)
         }
         g_tns.dirty = true;
         g_mode = MODE_THUMB;
-        return true;
+        break;
 
     case MODE_THUMB:
         load_image(g_fileidx);
         g_mode = MODE_IMAGE;
-        return true;
-
+        break;
     }
+
     return true;
 }
 
@@ -200,6 +202,7 @@ bool cg_scroll_screen(CommandArg dir)
         case MODE_IMAGE: return img_pan(&g_img, dir, -1);
         case MODE_THUMB: return tns_scroll(&g_tns, dir, true);
     }
+    return None;
 }
 
 
@@ -210,6 +213,7 @@ bool cg_zoom(CommandArg d)
         case MODE_IMAGE: return img_zoom(&g_img, d);
         case MODE_THUMB: return tns_zoom(&g_tns, d);
     }
+    return None;
 }
 
 

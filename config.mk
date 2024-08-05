@@ -17,8 +17,10 @@ HAVE_LIBFONTS = $(OPT_DEP_DEFAULT)
 HAVE_LIBEXIF  = $(OPT_DEP_DEFAULT)
 
 warning_flags := -Wall -Wextra -Wshadow \
-		 -Wredundant-decls -Wstrict-prototypes -Wold-style-definition \
-		 -Wformat=2 -Wwrite-strings -Wno-unused-parameter -Wnested-externs \
+		 -Wredundant-decls -Wwrite-strings -Wstrict-prototypes -Wold-style-definition \
+		 -Wformat -Wformat-security -Wno-unused-parameter -Wnested-externs -Wmissing-noreturn \
+	    	 -Wsuggest-attribute=pure -Wsuggest-attribute=const -Wsuggest-attribute=noreturn \
+                 -Wsuggest-attribute=malloc -Wsuggest-attribute=returns_nonnull \
 		 -pedantic # -Wconversion
 
 ifeq ($(CC),gcc)
