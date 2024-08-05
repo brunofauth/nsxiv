@@ -39,7 +39,7 @@
 #include "optparse.h"
 #pragma GCC diagnostic pop
 
-const opt_t *options;
+const opt_t *g_options;
 
 void print_usage(void)
 {
@@ -117,7 +117,7 @@ void parse_options(int argc, char **argv)
     const char scalemodes[] = "dfFwh"; /* must be sorted according to scalemode_t */
     static opt_t _options;
 
-    options = &_options;
+    g_options = &_options;
     _options.from_stdin = false;
     _options.to_stdout = false;
     _options.using_null = false;

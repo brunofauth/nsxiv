@@ -46,7 +46,7 @@
     atoms[ATOM_##atom] = XInternAtom(e->dpy, #atom, False);
 
 
-extern opt_t *options;
+extern opt_t *g_options;
 
 
 enum {
@@ -167,7 +167,7 @@ void win_init(win_t *win)
     win->bar.r.buf = rbuf;
     win->bar.l.size = sizeof(lbuf) - UTF8_PADDING;
     win->bar.r.size = sizeof(rbuf) - UTF8_PADDING;
-    win->bar.h = options->hide_bar ? 0 : barheight;
+    win->bar.h = g_options->hide_bar ? 0 : barheight;
     win->bar.top = TOP_STATUSBAR;
 #endif /* HAVE_LIBFONTS */
 
@@ -205,16 +205,16 @@ void win_open(win_t *win)
     char res_name[] = "nsxiv";
 
     e = &win->env;
-    parent = options->embed ? options->embed : RootWindow(e->dpy, e->scr);
+    parent = g_options->embed ? g_options->embed : RootWindow(e->dpy, e->scr);
 
     sizehints.flags = PWinGravity;
     sizehints.win_gravity = NorthWestGravity;
 
     /* determine window offsets, width & height */
-    if (options->geometry == NULL)
+    if (g_options->geometry == NULL)
         gmask = 0;
     else
-        gmask = XParseGeometry(options->geometry, &win->x, &win->y,
+        gmask = XParseGeometry(g_options->geometry, &win->x, &win->y,
                                &win->w, &win->h);
     if (gmask & WidthValue)
         sizehints.flags |= USSize;
@@ -302,7 +302,7 @@ void win_open(win_t *win)
 
     win_set_title(win, res_name, strlen(res_name));
     classhint.res_class = res_class;
-    classhint.res_name = options->res_name != NULL ? options->res_name : res_name;
+    classhint.res_name = g_options->res_name != NULL ? g_options->res_name : res_name;
     XSetClassHint(e->dpy, win->xwin, &classhint);
 
     XSetWMProtocols(e->dpy, win->xwin, &atoms[ATOM_WM_DELETE_WINDOW], 1);
@@ -318,7 +318,7 @@ void win_open(win_t *win)
     hints.initial_state = NormalState;
     XSetWMHints(win->env.dpy, win->xwin, &hints);
 
-    if (options->fullscreen) {
+    if (g_options->fullscreen) {
         XChangeProperty(e->dpy, win->xwin, atoms[ATOM__NET_WM_STATE],
                         XA_ATOM, 32, PropModeReplace,
                         (unsigned char *)&atoms[ATOM__NET_WM_STATE_FULLSCREEN], 1);

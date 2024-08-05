@@ -32,7 +32,7 @@
 #include "cli_options.h"
 
 
-extern opt_t *options;
+extern opt_t *g_options;
 extern char **environ;
 const char *progname = "nsxiv";
 
@@ -79,7 +79,7 @@ void error(int eval, int err, const char *fmt, ...)
 {
     va_list ap;
 
-    if (eval == 0 && options->quiet)
+    if (eval == 0 && g_options->quiet)
         exit(eval);
 
     fflush(stdout);

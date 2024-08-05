@@ -33,7 +33,7 @@
 extern SxivImage g_img;
 extern ThumbnailState g_tns;
 extern win_t g_win;
-extern opt_t *options;
+extern opt_t *g_options;
 
 
 static bool navigate_to(CommandArg n)
@@ -53,10 +53,10 @@ static bool navigate_to(CommandArg n)
 
 bool cg_quit(CommandArg status)
 {
-    if (options->to_stdout && g_markcnt > 0) {
+    if (g_options->to_stdout && g_markcnt > 0) {
         for (size_t i = 0; i < (size_t)g_filecnt; i++) {
             if (g_files[i].flags & FF_MARK)
-                printf("%s%c", g_files[i].name, options->using_null ? '\0' : '\n');
+                printf("%s%c", g_files[i].name, g_options->using_null ? '\0' : '\n');
         }
     }
     exit(status);
@@ -66,8 +66,8 @@ bool cg_quit(CommandArg status)
 
 bool cg_pick_quit(CommandArg status)
 {
-    if (options->to_stdout && g_markcnt == 0)
-        printf("%s%c", g_files[g_fileidx].name, options->using_null ? '\0' : '\n');
+    if (g_options->to_stdout && g_markcnt == 0)
+        printf("%s%c", g_files[g_fileidx].name, g_options->using_null ? '\0' : '\n');
     return cg_quit(status);
 }
 

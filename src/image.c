@@ -43,7 +43,7 @@ enum { DEF_ANIM_DELAY = 75 };
 #define ZOOM_MAX (zoom_levels[ARRLEN(zoom_levels) - 1] / 100)
 
 
-extern opt_t *options;
+extern opt_t *g_options;
 
 
 static int calc_cache_size(void)
@@ -74,28 +74,28 @@ void img_init(SxivImage *img, win_t *win)
 
     img->im = NULL;
     img->win = win;
-    img->scalemode = options->scalemode;
-    img->zoom = options->zoom;
+    img->scalemode = g_options->scalemode;
+    img->zoom = g_options->zoom;
     img->zoom = MAX(img->zoom, ZOOM_MIN);
     img->zoom = MIN(img->zoom, ZOOM_MAX);
 
     img->flags = 0;
-    img->flags |= (ImageFlags[]){0, IF_ANTI_ALIAS_ENABLED}[options->anti_alias];
-    img->flags |= (ImageFlags[]){0, IF_HAS_ALPHA_LAYER}[options->alpha_layer];
+    img->flags |= (ImageFlags[]){0, IF_ANTI_ALIAS_ENABLED}[g_options->anti_alias];
+    img->flags |= (ImageFlags[]){0, IF_HAS_ALPHA_LAYER}[g_options->alpha_layer];
 
     img->multi.cap = img->multi.cnt = 0;
-    img->multi.animate = options->animate;
-    img->multi.framedelay = options->framerate > 0 ? 1000 / options->framerate : 0;
+    img->multi.animate = g_options->animate;
+    img->multi.framedelay = g_options->framerate > 0 ? 1000 / g_options->framerate : 0;
     img->multi.length = 0;
 
     img->cmod = imlib_create_color_modifier();
     imlib_context_set_color_modifier(img->cmod);
     img->brightness = 0;
     img->contrast = 0;
-    img_change_color_modifier(img, options->gamma, &img->gamma);
+    img_change_color_modifier(img, g_options->gamma, &img->gamma);
 
-    img->slideshow_settings.is_enabled = options->slideshow > 0;
-    img->slideshow_settings.delay = options->slideshow > 0 ? options->slideshow : SLIDESHOW_DELAY * 10u;
+    img->slideshow_settings.is_enabled = g_options->slideshow > 0;
+    img->slideshow_settings.delay = g_options->slideshow > 0 ? g_options->slideshow : SLIDESHOW_DELAY * 10u;
 }
 
 #if HAVE_LIBEXIF

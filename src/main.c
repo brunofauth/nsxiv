@@ -70,7 +70,7 @@ AutoreloadState g_state_autoreload;
 SxivImage g_img;
 ThumbnailState g_tns;
 win_t g_win;
-extern opt_t *options;
+extern opt_t *g_options;
 
 
 appmode_t g_mode;
@@ -126,8 +126,8 @@ static void cleanup(void)
 
 static bool xgetline(char **lineptr, size_t *n)
 {
-    ssize_t len = getdelim(lineptr, n, options->using_null ? '\0' : '\n', stdin);
-    if (!options->using_null && len > 0 && (*lineptr)[len - 1] == '\n')
+    ssize_t len = getdelim(lineptr, n, g_options->using_null ? '\0' : '\n', stdin);
+    if (!g_options->using_null && len > 0 && (*lineptr)[len - 1] == '\n')
         (*lineptr)[len - 1] = '\0';
     return len > 0;
 }
@@ -182,7 +182,7 @@ static void add_entry(const char *entry_name)
     if (!S_ISDIR(fstats.st_mode)) {
         check_add_file(entry_name, true);
     } else {
-        if (r_opendir(&dir, entry_name, options->recursive) < 0) {
+        if (r_opendir(&dir, entry_name, g_options->recursive) < 0) {
             error(0, errno, "%s", entry_name);
             return;
         }
@@ -682,7 +682,7 @@ static bool run_key_handler(const char *key, unsigned int mask)
     strncpy(g_win.bar.r.buf, "Running key handler...", g_win.bar.r.size);
     win_draw(&g_win);
     win_set_cursor(&g_win, CURSOR_WATCH);
-    setenv("NSXIV_USING_NULL", options->using_null ? "1" : "0", 1);
+    setenv("NSXIV_USING_NULL", g_options->using_null ? "1" : "0", 1);
 
     snprintf(kstr, sizeof(kstr), "%s%s%s%s",
              mask & ControlMask ? "C-" : "",
@@ -701,7 +701,7 @@ static bool run_key_handler(const char *key, unsigned int mask)
     for (f = i = 0; f < fcnt; i++) {
         if ((marked && (g_files[i].flags & FF_MARK)) || (!marked && i == g_fileidx)) {
             stat(g_files[i].path, &oldst[f]);
-            fprintf(pfs, "%s%c", g_files[i].name, options->using_null ? '\0' : '\n');
+            fprintf(pfs, "%s%c", g_files[i].name, g_options->using_null ? '\0' : '\n');
             f++;
         }
     }
@@ -959,26 +959,26 @@ int main(int argc, char *argv[])
 
     parse_options(argc, argv);
 
-    if (options->clean_cache) {
+    if (g_options->clean_cache) {
         tns_init(&g_tns, NULL, NULL, NULL, NULL);
         tns_clean_cache();
         exit(EXIT_SUCCESS);
     }
 
-    if (options->filecnt == 0 && !options->from_stdin) {
+    if (g_options->filecnt == 0 && !g_options->from_stdin) {
         print_usage();
         exit(EXIT_FAILURE);
     }
 
-    if (options->recursive || options->from_stdin)
+    if (g_options->recursive || g_options->from_stdin)
         g_filecnt = 1024;
     else
-        g_filecnt = options->filecnt;
+        g_filecnt = g_options->filecnt;
 
     g_files = ecalloc(g_filecnt, sizeof(*g_files));
     g_fileidx = 0;
 
-    if (options->from_stdin) {
+    if (g_options->from_stdin) {
         char *filename = NULL;
         n = 0;
         while (xgetline(&filename, &n))
@@ -986,16 +986,16 @@ int main(int argc, char *argv[])
         free(filename);
     }
 
-    for (i = 0; i < options->filecnt; i++)
-        add_entry(options->filenames[i]);
+    for (i = 0; i < g_options->filecnt; i++)
+        add_entry(g_options->filenames[i]);
 
     if (g_fileidx == 0)
         error(EXIT_FAILURE, 0, "No valid image file given, aborting");
 
     g_filecnt = g_fileidx;
-    g_fileidx = options->startnum < g_filecnt ? options->startnum : 0;
+    g_fileidx = g_options->startnum < g_filecnt ? g_options->startnum : 0;
 
-    if (options->background_cache && !options->private_mode) {
+    if (g_options->background_cache && !g_options->private_mode) {
         pid_t ppid = getpid(); /* to check if parent is still alive or not */
         switch (fork()) {
         case 0:
@@ -1037,7 +1037,7 @@ int main(int argc, char *argv[])
     }
     wintitle.fd = info.fd = -1;
 
-    if (options->thumb_mode) {
+    if (g_options->thumb_mode) {
         g_mode = MODE_THUMB;
         tns_init(&g_tns, g_files, &g_filecnt, &g_fileidx, &g_win);
         while (!tns_load(&g_tns, g_fileidx, false, false))
