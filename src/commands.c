@@ -17,9 +17,14 @@
  * along with nsxiv.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "nsxiv.h"
 
 #include "commands.h"
+
+#include "cli_options.h"
+#include "image.h"
+#include "nsxiv.h"
+#include "thumbs.h"
+#include "util.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,152 +32,198 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-extern img_t g_img;
-extern tns_t g_tns;
-extern win_t g_win;
 
-static bool navigate_to(arg_t n)
+extern SxivImage g_img;
+extern ThumbnailState g_tns;
+extern win_t g_win;
+extern opt_t *g_options;
+
+
+static bool navigate_to(CommandArg n)
 {
-    if (n >= 0 && n < g_filecnt && n != g_fileidx) {
-        if (g_mode == MODE_IMAGE) {
-            load_image(n);
-        } else if (g_mode == MODE_THUMB) {
-            g_fileidx = n;
-            g_tns.dirty = true;
-        }
-        return true;
+    if (n < 0 || n >= g_filecnt || n == g_fileidx)
+        return false;
+
+    switch (g_mode) {
+        case MODE_ALL: error_quit(EXIT_FAILURE, 0, "unexpected mode 'ALL'");
+        case MODE_IMAGE: load_image(n); break;
+        case MODE_THUMB: g_fileidx = n; g_tns.dirty = true; break;
     }
-    return false;
+
+    return true;
 }
 
-bool cg_quit(arg_t status)
+
+bool cg_quit(CommandArg status)
 {
-    if (options->to_stdout && g_markcnt > 0) {
+    if (g_options->to_stdout && g_markcnt > 0) {
         for (size_t i = 0; i < (size_t)g_filecnt; i++) {
             if (g_files[i].flags & FF_MARK)
-                printf("%s%c", g_files[i].name, options->using_null ? '\0' : '\n');
+                printf("%s%c", g_files[i].name, g_options->using_null ? '\0' : '\n');
         }
     }
     exit(status);
-    return None; /* silence tcc warning */
 }
 
-bool cg_pick_quit(arg_t status)
+
+bool cg_pick_quit(CommandArg status)
 {
-    if (options->to_stdout && g_markcnt == 0)
-        printf("%s%c", g_files[g_fileidx].name, options->using_null ? '\0' : '\n');
-    return cg_quit(status);
+    if (g_options->to_stdout && g_markcnt == 0)
+        printf("%s%c", g_files[g_fileidx].name, g_options->using_null ? '\0' : '\n');
+    cg_quit(status);
 }
 
-bool cg_switch_mode(arg_t _)
+
+bool cg_switch_mode(CommandArg _)
 {
-    if (g_mode == MODE_IMAGE) {
+    switch (g_mode) {
+    case MODE_ALL:
+        error_quit(EXIT_FAILURE, 0, "unexpected mode 'ALL'");
+
+    case MODE_IMAGE: 
         if (g_tns.thumbs == NULL)
             tns_init(&g_tns, g_files, &g_filecnt, &g_fileidx, &g_win);
         img_close(&g_img, false);
         reset_timeout(reset_cursor);
-        if (g_img.ss.on) {
-            g_img.ss.on = false;
+        if (g_img.slideshow_settings.is_enabled) {
+            g_img.slideshow_settings.is_enabled = false;
             reset_timeout(slideshow);
         }
         g_tns.dirty = true;
         g_mode = MODE_THUMB;
-    } else {
+        break;
+
+    case MODE_THUMB:
         load_image(g_fileidx);
         g_mode = MODE_IMAGE;
+        break;
     }
+
     return true;
 }
 
-bool cg_toggle_fullscreen(arg_t _)
+
+bool cg_toggle_fullscreen(CommandArg _)
 {
     win_toggle_fullscreen(&g_win);
     /* redraw after next ConfigureNotify event */
     set_timeout(redraw, TO_REDRAW_RESIZE, false);
-    if (g_mode == MODE_IMAGE)
-        g_img.checkpan = g_img.dirty = true;
-    else
-        g_tns.dirty = true;
+
+    switch (g_mode) {
+        case MODE_ALL: error_quit(EXIT_FAILURE, 0, "unexpected mode 'ALL'");
+        case MODE_IMAGE: g_img.flags |= IF_CHECKPAN | IF_IS_DIRTY; break;
+        case MODE_THUMB: g_tns.dirty = true; break;
+    }
+        
     return false;
 }
 
-bool cg_toggle_bar(arg_t _)
+
+bool cg_toggle_bar(CommandArg _)
 {
     win_toggle_bar(&g_win);
-    if (g_mode == MODE_IMAGE)
-        g_img.checkpan = g_img.dirty = true;
-    else
-        g_tns.dirty = true;
+
+    switch (g_mode) {
+        case MODE_ALL: error_quit(EXIT_FAILURE, 0, "unexpected mode 'ALL'");
+        case MODE_IMAGE: g_img.flags |= IF_CHECKPAN | IF_IS_DIRTY; break;
+        case MODE_THUMB: g_tns.dirty = true; break;
+    }
+        
     if (g_win.bar.h > 0)
         open_info();
     else
         close_info();
+
     return true;
 }
 
-bool cg_prefix_external(arg_t _)
+
+bool cg_prefix_external(CommandArg _)
 {
     handle_key_handler(true);
     return false;
 }
 
-bool cg_reload_image(arg_t _)
+
+bool cg_reload_image(CommandArg _)
 {
-    if (g_mode == MODE_IMAGE) {
-        load_image(g_fileidx);
-    } else {
-        win_set_cursor(&g_win, CURSOR_WATCH);
-        if (!tns_load(&g_tns, g_fileidx, true, false)) {
-            remove_file(g_fileidx, false);
-            g_tns.dirty = true;
-        }
+    switch (g_mode) {
+        case MODE_ALL:
+            error_quit(EXIT_FAILURE, 0, "unexpected mode 'ALL'");
+
+        case MODE_IMAGE:
+            load_image(g_fileidx);
+            break;
+
+        case MODE_THUMB:
+            win_set_cursor(&g_win, CURSOR_WATCH);
+            if (!tns_load(&g_tns, g_fileidx, true, false)) {
+                remove_file(g_fileidx, false);
+                g_tns.dirty = true;
+            }
+            break;
     }
+
     return true;
 }
 
-bool cg_remove_image(arg_t _)
+
+bool cg_remove_image(CommandArg _)
 {
     remove_file(g_fileidx, true);
-    if (g_mode == MODE_IMAGE)
-        load_image(g_fileidx);
-    else
-        g_tns.dirty = true;
+
+    switch (g_mode) {
+        case MODE_ALL: error_quit(EXIT_FAILURE, 0, "unexpected mode 'ALL'");
+        case MODE_IMAGE: load_image(g_fileidx); break;
+        case MODE_THUMB: g_tns.dirty = true; break;
+    }
+
     return true;
 }
 
-bool cg_first(arg_t _)
+
+bool cg_first(CommandArg _)
 {
     return navigate_to(0);
 }
 
-bool cg_n_or_last(arg_t _)
+
+bool cg_n_or_last(CommandArg _)
 {
     int n = g_prefix != 0 && g_prefix - 1 < g_filecnt ? g_prefix - 1 : g_filecnt - 1;
     return navigate_to(n);
 }
 
-bool cg_scroll_screen(arg_t dir)
+
+bool cg_scroll_screen(CommandArg dir)
 {
-    if (g_mode == MODE_IMAGE)
-        return img_pan(&g_img, dir, -1);
-    else
-        return tns_scroll(&g_tns, dir, true);
+    switch (g_mode) {
+        case MODE_ALL: error_quit(EXIT_FAILURE, 0, "unexpected mode 'ALL'");
+        case MODE_IMAGE: return img_pan(&g_img, dir, -1);
+        case MODE_THUMB: return tns_scroll(&g_tns, dir, true);
+    }
+    return None;
 }
 
-bool cg_zoom(arg_t d)
+
+bool cg_zoom(CommandArg d)
 {
-    if (g_mode == MODE_THUMB)
-        return tns_zoom(&g_tns, d);
-    else
-        return img_zoom(&g_img, d);
+    switch (g_mode) {
+        case MODE_ALL: error_quit(EXIT_FAILURE, 0, "unexpected mode 'ALL'");
+        case MODE_IMAGE: return img_zoom(&g_img, d);
+        case MODE_THUMB: return tns_zoom(&g_tns, d);
+    }
+    return None;
 }
 
-bool cg_toggle_image_mark(arg_t _)
+
+bool cg_toggle_image_mark(CommandArg _)
 {
     return mark_image(g_fileidx, !(g_files[g_fileidx].flags & FF_MARK));
 }
 
-bool cg_reverse_marks(arg_t _)
+
+bool cg_reverse_marks(CommandArg _)
 {
     int i;
 
@@ -185,7 +236,8 @@ bool cg_reverse_marks(arg_t _)
     return true;
 }
 
-bool cg_mark_range(arg_t _)
+
+bool cg_mark_range(CommandArg _)
 {
     int d = g_markidx < g_fileidx ? 1 : -1, end, i;
     bool dirty = false, on = !!(g_files[g_markidx].flags & FF_MARK);
@@ -195,7 +247,8 @@ bool cg_mark_range(arg_t _)
     return dirty;
 }
 
-bool cg_unmark_all(arg_t _)
+
+bool cg_unmark_all(CommandArg _)
 {
     int i;
 
@@ -207,7 +260,8 @@ bool cg_unmark_all(arg_t _)
     return true;
 }
 
-bool cg_navigate_marked(arg_t n)
+
+bool cg_navigate_marked(CommandArg n)
 {
     int d, i;
     int new = g_fileidx;
@@ -224,7 +278,7 @@ bool cg_navigate_marked(arg_t n)
     return navigate_to(new);
 }
 
-static bool change_color_modifier(arg_t d, int *target)
+static bool change_color_modifier(CommandArg d, int *target)
 {
     if (!img_change_color_modifier(&g_img, d * (g_prefix > 0 ? g_prefix : 1), target))
         return false;
@@ -233,22 +287,26 @@ static bool change_color_modifier(arg_t d, int *target)
     return true;
 }
 
-bool cg_change_gamma(arg_t d)
+
+bool cg_change_gamma(CommandArg d)
 {
     return change_color_modifier(d, &g_img.gamma);
 }
 
-bool cg_change_brightness(arg_t d)
+
+bool cg_change_brightness(CommandArg d)
 {
     return change_color_modifier(d, &g_img.brightness);
 }
 
-bool cg_change_contrast(arg_t d)
+
+bool cg_change_contrast(CommandArg d)
 {
     return change_color_modifier(d, &g_img.contrast);
 }
 
-bool ci_navigate(arg_t n)
+
+bool ci_navigate(CommandArg n)
 {
     if (g_prefix > 0)
         n *= g_prefix;
@@ -258,30 +316,34 @@ bool ci_navigate(arg_t n)
     if (n != g_fileidx) {
         load_image(n);
         return true;
-    } else {
-        return false;
     }
+
+    return false;
 }
 
-bool ci_cursor_navigate(arg_t _)
+
+bool ci_cursor_navigate(CommandArg _)
 {
     return ci_navigate(nav_button() - 1);
 }
 
-bool ci_alternate(arg_t _)
+
+bool ci_alternate(CommandArg _)
 {
     load_image(g_alternate);
     return true;
 }
 
-bool ci_navigate_frame(arg_t d)
+
+bool ci_navigate_frame(CommandArg d)
 {
     if (g_prefix > 0)
         d *= g_prefix;
     return !g_img.multi.animate && img_frame_navigate(&g_img, d);
 }
 
-bool ci_toggle_animation(arg_t _)
+
+bool ci_toggle_animation(CommandArg _)
 {
     bool dirty = false;
 
@@ -297,22 +359,26 @@ bool ci_toggle_animation(arg_t _)
     return dirty;
 }
 
-bool ci_scroll(arg_t dir)
+
+bool ci_scroll(CommandArg dir)
 {
     return img_pan(&g_img, dir, g_prefix);
 }
 
-bool ci_scroll_to_center(arg_t _)
+
+bool ci_scroll_to_center(CommandArg _)
 {
     return img_pan_center(&g_img);
 }
 
-bool ci_scroll_to_edge(arg_t dir)
+
+bool ci_scroll_to_edge(CommandArg dir)
 {
     return img_pan_edge(&g_img, dir);
 }
 
-bool ci_drag(arg_t drag_mode)
+
+bool ci_drag(CommandArg drag_mode)
 {
     int x, y, ox, oy;
     float px, py;
@@ -337,7 +403,7 @@ bool ci_drag(arg_t drag_mode)
             py = g_img.y + y - oy;
         }
 
-        if (img_pos(&g_img, px, py)) {
+        if (img_set_position(&g_img, px, py)) {
             img_render(&g_img);
             win_draw(&g_win);
         }
@@ -358,73 +424,84 @@ bool ci_drag(arg_t drag_mode)
     return true;
 }
 
-bool ci_set_zoom(arg_t zl)
+
+bool ci_set_zoom(CommandArg zl)
 {
     return img_zoom_to(&g_img, (g_prefix ? g_prefix : zl) / 100.0);
 }
 
-bool ci_fit_to_win(arg_t sm)
+
+bool ci_fit_to_win(CommandArg sm)
 {
     return img_fit_win(&g_img, sm);
 }
 
-bool ci_rotate(arg_t degree)
+
+bool ci_rotate(CommandArg degree)
 {
     img_rotate(&g_img, degree);
     return true;
 }
 
-bool ci_flip(arg_t dir)
+
+bool ci_flip(CommandArg dir)
 {
     img_flip(&g_img, dir);
     return true;
 }
 
-bool ci_toggle_antialias(arg_t _)
+
+bool ci_toggle_antialias(CommandArg _)
 {
     img_toggle_antialias(&g_img);
     return true;
 }
 
-bool ci_toggle_alpha(arg_t _)
+
+bool ci_toggle_alpha(CommandArg _)
 {
-    g_img.alpha_layer = !g_img.alpha_layer;
-    g_img.dirty = true;
+    g_img.flags = (g_img.flags & ~IF_HAS_ALPHA_LAYER) | (~g_img.flags & IF_HAS_ALPHA_LAYER);
+    g_img.flags |= IF_IS_DIRTY;
     return true;
 }
 
-bool ci_slideshow(arg_t _)
+
+bool ci_slideshow(CommandArg _)
 {
     if (g_prefix > 0) {
-        g_img.ss.on = true;
-        g_img.ss.delay = g_prefix * 10;
-        set_timeout(slideshow, g_img.ss.delay * 100, true);
-    } else if (g_img.ss.on) {
-        g_img.ss.on = false;
+        g_img.slideshow_settings.is_enabled = true;
+        g_img.slideshow_settings.delay = g_prefix * 10;
+        set_timeout(slideshow, g_img.slideshow_settings.delay * 100, true);
+    } else if (g_img.slideshow_settings.is_enabled) {
+        g_img.slideshow_settings.is_enabled = false;
         reset_timeout(slideshow);
     } else {
-        g_img.ss.on = true;
+        g_img.slideshow_settings.is_enabled = true;
     }
     return true;
 }
 
-bool ct_move_sel(arg_t dir)
+
+bool ct_move_sel(CommandArg dir)
 {
     return tns_move_selection(&g_tns, dir, g_prefix);
 }
 
-bool ct_reload_all(arg_t flags)
+
+bool ct_reload_all(CommandArg flags)
 {
     tns_replace(&g_tns, g_files, &g_filecnt, &g_fileidx, &g_win, flags);
     return true;
 }
 
-bool ct_scroll(arg_t dir)
+
+bool ct_scroll(CommandArg dir)
 {
     return tns_scroll(&g_tns, dir, false);
 }
 
-bool ct_drag_mark_image(arg_t _)
+
+bool ct_drag_mark_image(CommandArg _)
 {
     int sel;
 
@@ -448,7 +525,8 @@ bool ct_drag_mark_image(arg_t _)
     return false;
 }
 
-bool ct_select(arg_t _)
+
+bool ct_select(CommandArg _)
 {
     int sel;
     bool dirty = false;
@@ -474,7 +552,8 @@ bool ct_select(arg_t _)
     return dirty;
 }
 
-bool ct_toggle_squared(arg_t _)
+
+bool ct_toggle_squared(CommandArg _)
 {
     tns_toggle_squared();
     ct_reload_all(RF_KEEP_ZOOM_LEVEL & RF_KEEP_MARK_COLOR_MOD);

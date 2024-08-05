@@ -17,7 +17,13 @@
  * along with nsxiv.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "nsxiv.h"
+#include "autoreload.h"
+#include "cli_options.h"
+#include "image.h"
+#include "thumbs.h"
+#include "util.h"
+#include "window.h"
+
 #define INCLUDE_MAPPINGS_CONFIG
 #include "commands.h"
 #include "config.h"
@@ -53,16 +59,19 @@
         (tv)->tv_usec += (t) % 1000 * 1000; \
     } while (0)
 
+
 typedef struct {
     int err;
     char *cmd;
 } extcmd_t;
 
-/* these are not declared in nsxiv.h, as it causes too many -Wshadow warnings */
-arl_t g_state_autoreload;
-img_t g_img;
-tns_t g_tns;
+
+AutoreloadState g_state_autoreload;
+SxivImage g_img;
+ThumbnailState g_tns;
 win_t g_win;
+extern opt_t *g_options;
+
 
 appmode_t g_mode;
 fileinfo_t *g_files;
@@ -114,18 +123,21 @@ static void cleanup(void)
     win_close(&g_win);
 }
 
+
 static bool xgetline(char **lineptr, size_t *n)
 {
-    ssize_t len = getdelim(lineptr, n, options->using_null ? '\0' : '\n', stdin);
-    if (!options->using_null && len > 0 && (*lineptr)[len - 1] == '\n')
+    ssize_t len = getdelim(lineptr, n, g_options->using_null ? '\0' : '\n', stdin);
+    if (!g_options->using_null && len > 0 && (*lineptr)[len - 1] == '\n')
         (*lineptr)[len - 1] = '\0';
     return len > 0;
 }
+
 
 static int fncmp(const void *a, const void *b)
 {
     return strcoll(((fileinfo_t *)a)->name, ((fileinfo_t *)b)->name);
 }
+
 
 static void check_add_file(const char *filename, bool given)
 {
@@ -138,7 +150,7 @@ static void check_add_file(const char *filename, bool given)
         (path = realpath(filename, NULL)) == NULL)
     {
         if (given)
-            error(0, errno, "%s", filename);
+            error_log(errno, "%s", filename);
         return;
     }
 
@@ -155,6 +167,7 @@ static void check_add_file(const char *filename, bool given)
     g_fileidx++;
 }
 
+
 static void add_entry(const char *entry_name)
 {
     int start;
@@ -163,14 +176,14 @@ static void add_entry(const char *entry_name)
     r_dir_t dir;
 
     if (stat(entry_name, &fstats) < 0) {
-        error(0, errno, "%s", entry_name);
+        error_log(errno, "%s", entry_name);
         return;
     }
     if (!S_ISDIR(fstats.st_mode)) {
         check_add_file(entry_name, true);
     } else {
-        if (r_opendir(&dir, entry_name, options->recursive) < 0) {
-            error(0, errno, "%s", entry_name);
+        if (r_opendir(&dir, entry_name, g_options->recursive) < 0) {
+            error_log(errno, "%s", entry_name);
             return;
         }
         start = g_fileidx;
@@ -183,6 +196,7 @@ static void add_entry(const char *entry_name)
             qsort(g_files + start, g_fileidx - start, sizeof(*g_files), fncmp);
     }
 }
+
 
 void remove_file(int n, bool manual)
 {
@@ -220,6 +234,7 @@ void remove_file(int n, bool manual)
         g_markidx--;
 }
 
+
 void set_timeout(timeout_f handler, int time, bool overwrite)
 {
     unsigned int i;
@@ -236,6 +251,7 @@ void set_timeout(timeout_f handler, int time, bool overwrite)
     }
 }
 
+
 void reset_timeout(timeout_f handler)
 {
     unsigned int i;
@@ -247,6 +263,7 @@ void reset_timeout(timeout_f handler)
         }
     }
 }
+
 
 static bool check_timeouts(int *t)
 {
@@ -283,9 +300,10 @@ static bool check_timeouts(int *t)
     return tmin != INT_MAX;
 }
 
+
 static void autoreload(void)
 {
-    if (g_img.autoreload_pending) {
+    if (g_img.flags & IF_IS_AUTORELOAD_PENDING) {
         img_close(&g_img, true);
         /* load_image() sets autoreload_pending to false */
         load_image(g_fileidx);
@@ -294,6 +312,7 @@ static void autoreload(void)
         assert(!"unreachable");
     }
 }
+
 
 static void kill_close(pid_t pid, int *fd)
 {
@@ -304,10 +323,12 @@ static void kill_close(pid_t pid, int *fd)
     }
 }
 
+
 static void close_title(void)
 {
     kill_close(wintitle.pid, &wintitle.fd);
 }
+
 
 static void read_title(void)
 {
@@ -320,6 +341,7 @@ static void read_title(void)
     }
     close_title();
 }
+
 
 static void open_title(void)
 {
@@ -342,10 +364,12 @@ static void open_title(void)
     wintitle.pid = spawn(&wintitle.fd, NULL, O_NONBLOCK, argv);
 }
 
+
 void close_info(void)
 {
     kill_close(info.pid, &info.fd);
 }
+
 
 void open_info(void)
 {
@@ -365,6 +389,7 @@ void open_info(void)
     info.pid = spawn(&info.fd, NULL, O_NONBLOCK, argv);
 }
 
+
 static void read_info(void)
 {
     ssize_t n = read(info.fd, g_win.bar.l.buf, g_win.bar.l.size - 1);
@@ -382,6 +407,7 @@ static void read_info(void)
     close_info();
 }
 
+
 void load_image(int new)
 {
     bool prev = new < g_fileidx;
@@ -397,7 +423,7 @@ void load_image(int new)
 
     if (new != current) {
         g_alternate = current;
-        g_img.autoreload_pending = false;
+        g_img.flags &= ~IF_IS_AUTORELOAD_PENDING;
     }
 
     img_close(&g_img, false);
@@ -419,6 +445,7 @@ void load_image(int new)
         reset_timeout(animate);
 }
 
+
 bool mark_image(int n, bool on)
 {
     g_markidx = n;
@@ -432,6 +459,7 @@ bool mark_image(int n, bool on)
     return false;
 }
 
+
 static void bar_put(win_bar_t *bar, const char *fmt, ...)
 {
     size_t len = bar->size - (bar->p - bar->buf), n;
@@ -442,6 +470,7 @@ static void bar_put(win_bar_t *bar, const char *fmt, ...)
     bar->p += MIN(len, n);
     va_end(ap);
 }
+
 
 static void update_info(void)
 {
@@ -491,11 +520,11 @@ static void update_info(void)
             strncpy(l->buf, g_files[g_fileidx].name, l->size);
     } else {
         bar_put(r, "%s", mark);
-        if (g_img.ss.on) {
-            if (g_img.ss.delay % 10 != 0)
-                bar_put(r, "%2.1fs" BAR_SEP, (float)g_img.ss.delay / 10);
+        if (g_img.slideshow_settings.is_enabled) {
+            if (g_img.slideshow_settings.delay % 10 != 0)
+                bar_put(r, "%2.1fs" BAR_SEP, (float)g_img.slideshow_settings.delay / 10);
             else
-                bar_put(r, "%ds" BAR_SEP, g_img.ss.delay / 10);
+                bar_put(r, "%ds" BAR_SEP, g_img.slideshow_settings.delay / 10);
         }
         if (g_img.gamma)
             bar_put(r, "G%+d" BAR_SEP, g_img.gamma);
@@ -518,6 +547,7 @@ static void update_info(void)
     }
 }
 
+
 int nav_button(void)
 {
     int x, y, nw;
@@ -536,12 +566,13 @@ int nav_button(void)
     return 2;
 }
 
+
 void redraw(void)
 {
     if (g_mode == MODE_IMAGE) {
         img_render(&g_img);
-        if (g_img.ss.on) {
-            int t = g_img.ss.delay * 100;
+        if (g_img.slideshow_settings.is_enabled) {
+            int t = g_img.slideshow_settings.delay * 100;
             if (g_img.multi.cnt > 0 && g_img.multi.animate)
                 t = MAX(t, g_img.multi.length);
             set_timeout(slideshow, t, false);
@@ -554,6 +585,7 @@ void redraw(void)
     reset_timeout(redraw);
     reset_cursor();
 }
+
 
 void reset_cursor(void)
 {
@@ -579,6 +611,7 @@ void reset_cursor(void)
     win_set_cursor(&g_win, cursor);
 }
 
+
 void animate(void)
 {
     if (img_frame_animate(&g_img)) {
@@ -587,21 +620,26 @@ void animate(void)
     }
 }
 
+
 void slideshow(void)
 {
     load_image(g_fileidx + 1 < g_filecnt ? g_fileidx + 1 : 0);
     redraw();
 }
 
+
 void clear_resize(void)
 {
     resized = false;
 }
 
+
+// cppcheck-suppress constParameterCallback
 static Bool is_input_ev(Display *dpy, XEvent *ev, XPointer arg)
 {
     return ev->type == ButtonPress || ev->type == KeyPress;
 }
+
 
 void handle_key_handler(bool init)
 {
@@ -618,6 +656,7 @@ void handle_key_handler(bool init)
     win_draw(&g_win);
 }
 
+
 static bool run_key_handler(const char *key, unsigned int mask)
 {
     FILE *pfs;
@@ -633,7 +672,7 @@ static bool run_key_handler(const char *key, unsigned int mask)
 
     if (keyhandler.f.err) {
         if (!keyhandler.warned) {
-            error(0, keyhandler.f.err, "%s", keyhandler.f.cmd);
+            error_log(keyhandler.f.err, "%s", keyhandler.f.cmd);
             keyhandler.warned = true;
         }
         return false;
@@ -644,7 +683,7 @@ static bool run_key_handler(const char *key, unsigned int mask)
     strncpy(g_win.bar.r.buf, "Running key handler...", g_win.bar.r.size);
     win_draw(&g_win);
     win_set_cursor(&g_win, CURSOR_WATCH);
-    setenv("NSXIV_USING_NULL", options->using_null ? "1" : "0", 1);
+    setenv("NSXIV_USING_NULL", g_options->using_null ? "1" : "0", 1);
 
     snprintf(kstr, sizeof(kstr), "%s%s%s%s",
              mask & ControlMask ? "C-" : "",
@@ -654,7 +693,7 @@ static bool run_key_handler(const char *key, unsigned int mask)
     if ((pid = spawn(NULL, &writefd, 0x0, argv)) < 0)
         return false;
     if ((pfs = fdopen(writefd, "w")) == NULL) {
-        error(0, errno, "open pipe");
+        error_log(errno, "open pipe");
         close(writefd);
         return false;
     }
@@ -663,7 +702,7 @@ static bool run_key_handler(const char *key, unsigned int mask)
     for (f = i = 0; f < fcnt; i++) {
         if ((marked && (g_files[i].flags & FF_MARK)) || (!marked && i == g_fileidx)) {
             stat(g_files[i].path, &oldst[f]);
-            fprintf(pfs, "%s%c", g_files[i].name, options->using_null ? '\0' : '\n');
+            fprintf(pfs, "%s%c", g_files[i].name, g_options->using_null ? '\0' : '\n');
             f++;
         }
     }
@@ -700,6 +739,7 @@ static bool run_key_handler(const char *key, unsigned int mask)
     return true;
 }
 
+
 static bool process_bindings(const keymap_t *bindings, unsigned int len, KeySym ksym_or_button,
                              unsigned int state, unsigned int implicit_mod)
 {
@@ -718,6 +758,7 @@ static bool process_bindings(const keymap_t *bindings, unsigned int len, KeySym 
     }
     return dirty;
 }
+
 
 static void on_keypress(XKeyEvent *kev)
 {
@@ -756,6 +797,7 @@ static void on_keypress(XKeyEvent *kev)
     g_prefix = 0;
 }
 
+
 static void on_buttonpress(const XButtonEvent *bev)
 {
     bool dirty = false;
@@ -771,6 +813,7 @@ static void on_buttonpress(const XButtonEvent *bev)
         redraw();
     g_prefix = 0;
 }
+
 
 static void run(void)
 {
@@ -823,7 +866,7 @@ static void run(void)
                 if (pfd[FD_TITLE].revents & POLLHUP)
                     read_title();
                 if ((pfd[FD_ARL].revents & POLLIN) && autoreload_handle_events(&g_state_autoreload)) {
-                    g_img.autoreload_pending = true;
+                    g_img.flags |= IF_IS_AUTORELOAD_PENDING;
                     set_timeout(autoreload, TO_AUTORELOAD, true);
                 }
                 continue;
@@ -864,10 +907,10 @@ static void run(void)
         case ConfigureNotify:
             if (win_configure(&g_win, &ev.xconfigure)) {
                 if (g_mode == MODE_IMAGE) {
-                    g_img.dirty = true;
-                    g_img.checkpan = true;
+                    g_img.flags |= IF_IS_DIRTY;
+                    g_img.flags |= IF_CHECKPAN;
                 } else {
-                    g_tns.dirty = true;
+                    g_img.flags |= IF_IS_DIRTY;
                 }
                 if (!resized) {
                     redraw();
@@ -891,6 +934,7 @@ static void run(void)
     }
 }
 
+
 static void setup_signal(int sig, void (*handler)(int sig), int flags)
 {
     struct sigaction sa;
@@ -899,8 +943,9 @@ static void setup_signal(int sig, void (*handler)(int sig), int flags)
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = flags;
     if (sigaction(sig, &sa, NULL) < 0)
-        error(EXIT_FAILURE, errno, "signal %d", sig);
+        error_quit(EXIT_FAILURE, errno, "signal %d", sig);
 }
+
 
 int main(int argc, char *argv[])
 {
@@ -915,26 +960,26 @@ int main(int argc, char *argv[])
 
     parse_options(argc, argv);
 
-    if (options->clean_cache) {
+    if (g_options->clean_cache) {
         tns_init(&g_tns, NULL, NULL, NULL, NULL);
         tns_clean_cache();
         exit(EXIT_SUCCESS);
     }
 
-    if (options->filecnt == 0 && !options->from_stdin) {
+    if (g_options->filecnt == 0 && !g_options->from_stdin) {
         print_usage();
         exit(EXIT_FAILURE);
     }
 
-    if (options->recursive || options->from_stdin)
+    if (g_options->recursive || g_options->from_stdin)
         g_filecnt = 1024;
     else
-        g_filecnt = options->filecnt;
+        g_filecnt = g_options->filecnt;
 
     g_files = ecalloc(g_filecnt, sizeof(*g_files));
     g_fileidx = 0;
 
-    if (options->from_stdin) {
+    if (g_options->from_stdin) {
         char *filename = NULL;
         n = 0;
         while (xgetline(&filename, &n))
@@ -942,16 +987,16 @@ int main(int argc, char *argv[])
         free(filename);
     }
 
-    for (i = 0; i < options->filecnt; i++)
-        add_entry(options->filenames[i]);
+    for (i = 0; i < g_options->filecnt; i++)
+        add_entry(g_options->filenames[i]);
 
     if (g_fileidx == 0)
-        error(EXIT_FAILURE, 0, "No valid image file given, aborting");
+        error_quit(EXIT_FAILURE, 0, "No valid image file given, aborting");
 
     g_filecnt = g_fileidx;
-    g_fileidx = options->startnum < g_filecnt ? options->startnum : 0;
+    g_fileidx = g_options->startnum < g_filecnt ? g_options->startnum : 0;
 
-    if (options->background_cache && !options->private_mode) {
+    if (g_options->background_cache && !g_options->private_mode) {
         pid_t ppid = getpid(); /* to check if parent is still alive or not */
         switch (fork()) {
         case 0:
@@ -963,7 +1008,7 @@ int main(int argc, char *argv[])
             exit(0);
             break;
         case -1:
-            error(0, errno, "fork failed");
+            error_log(errno, "fork failed");
             break;
         }
     }
@@ -989,11 +1034,11 @@ int main(int argc, char *argv[])
                 cmd[i]->err = errno;
         }
     } else {
-        error(0, 0, "Exec directory not found");
+        error_log(0, "Exec directory not found");
     }
     wintitle.fd = info.fd = -1;
 
-    if (options->thumb_mode) {
+    if (g_options->thumb_mode) {
         g_mode = MODE_THUMB;
         tns_init(&g_tns, g_files, &g_filecnt, &g_fileidx, &g_win);
         while (!tns_load(&g_tns, g_fileidx, false, false))

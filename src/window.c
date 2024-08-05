@@ -17,10 +17,19 @@
  * along with nsxiv.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "nsxiv.h"
+#include "cli_options.h"
+#include "icon_data.h"
+#include "util.h"
+#include "window.h"
 #define INCLUDE_WINDOW_CONFIG
 #include "config.h"
-#include "icon_data.h"
+
+#if HAVE_LIBFONTS
+#include "utf8.h"
+#define UTF8_PADDING 4 /* utf8_decode requires 4 bytes of zero padding */
+#define TEXTWIDTH(win, text, len) \
+    win_draw_text(win, NULL, NULL, 0, 0, text, len, 0)
+#endif
 
 #include <assert.h>
 #include <locale.h>
@@ -32,16 +41,13 @@
 #include <X11/Xresource.h>
 #include <X11/cursorfont.h>
 
-#if HAVE_LIBFONTS
-#include "utf8.h"
-#define UTF8_PADDING 4 /* utf8_decode requires 4 bytes of zero padding */
-#define TEXTWIDTH(win, text, len) \
-    win_draw_text(win, NULL, NULL, 0, 0, text, len, 0)
-#endif
-
 #define RES_CLASS "Nsxiv"
 #define INIT_ATOM_(atom) \
     atoms[ATOM_##atom] = XInternAtom(e->dpy, #atom, False);
+
+
+extern opt_t *g_options;
+
 
 enum {
     H_TEXT_PAD = 5,
@@ -74,7 +80,7 @@ static void win_init_font(const win_env_t *e, const char *fontstr)
 {
     int fontheight = 0;
     if ((font = XftFontOpenName(e->dpy, e->scr, fontstr)) == NULL)
-        error(EXIT_FAILURE, 0, "Error loading font '%s'", fontstr);
+        error_quit(EXIT_FAILURE, 0, "Error loading font '%s'", fontstr);
     fontheight = font->ascent + font->descent;
     FcPatternGetDouble(font->pattern, FC_SIZE, 0, &fontsize);
     barheight = fontheight + 2 * V_TEXT_PAD;
@@ -83,7 +89,7 @@ static void win_init_font(const win_env_t *e, const char *fontstr)
 static void xft_alloc_color(const win_env_t *e, const char *name, XftColor *col)
 {
     if (!XftColorAllocName(e->dpy, e->vis, e->cmap, name, col))
-        error(EXIT_FAILURE, 0, "Error allocating color '%s'", name);
+        error_quit(EXIT_FAILURE, 0, "Error allocating color '%s'", name);
 }
 #endif /* HAVE_LIBFONTS */
 
@@ -91,22 +97,23 @@ static void win_alloc_color(const win_env_t *e, const char *name, XColor *col)
 {
     XColor screen;
     if (!XAllocNamedColor(e->dpy, e->cmap, name, &screen, col))
-        error(EXIT_FAILURE, 0, "Error allocating color '%s'", name);
+        error_quit(EXIT_FAILURE, 0, "Error allocating color '%s'", name);
 }
 
-static const char *win_res(XrmDatabase db, const char *name, const char *def)
+static const char *win_get_resource(XrmDatabase db, const char *name, const char *default_value)
 {
     char *type;
     XrmValue ret;
 
-    if (db != NULL &&
-        XrmGetResource(db, name, name, &type, &ret) &&
-        STREQ(type, "String") && *ret.addr != '\0')
-    {
+    if (db != NULL
+        && XrmGetResource(db, name, name, &type, &ret)
+        && STREQ(type, "String")
+        && *ret.addr != '\0'
+    ) {
         return ret.addr;
-    } else {
-        return def;
     }
+
+    return default_value;
 }
 
 void win_init(win_t *win)
@@ -125,7 +132,7 @@ void win_init(win_t *win)
 
     e = &win->env;
     if ((e->dpy = XOpenDisplay(NULL)) == NULL)
-        error(EXIT_FAILURE, 0, "Error opening X display");
+        error_quit(EXIT_FAILURE, 0, "Error opening X display");
 
     e->scr = DefaultScreen(e->dpy);
     e->scrw = DisplayWidth(e->dpy, e->scr);
@@ -135,33 +142,33 @@ void win_init(win_t *win)
     e->cmap = DefaultColormap(e->dpy, e->scr);
 
     if (setlocale(LC_CTYPE, "") == NULL || XSupportsLocale() == 0)
-        error(0, 0, "No locale support");
+        error_log(0, "No locale support");
 
     XrmInitialize();
     res_man = XResourceManagerString(e->dpy);
     db = res_man == NULL ? NULL : XrmGetStringDatabase(res_man);
 
-    win_bg = win_res(db, WIN_BG[0], WIN_BG[1] ? WIN_BG[1] : "white");
-    win_fg = win_res(db, WIN_FG[0], WIN_FG[1] ? WIN_FG[1] : "black");
-    mrk_fg = win_res(db, MARK_FG[0], MARK_FG[1] ? MARK_FG[1] : win_fg);
+    win_bg = win_get_resource(db, WIN_BG[0], WIN_BG[1] ? WIN_BG[1] : "white");
+    win_fg = win_get_resource(db, WIN_FG[0], WIN_FG[1] ? WIN_FG[1] : "black");
+    mrk_fg = win_get_resource(db, MARK_FG[0], MARK_FG[1] ? MARK_FG[1] : win_fg);
     win_alloc_color(e, win_bg, &win->win_bg);
     win_alloc_color(e, win_fg, &win->win_fg);
     win_alloc_color(e, mrk_fg, &win->tn_mark_fg);
 
 #if HAVE_LIBFONTS
-    bar_bg = win_res(db, BAR_BG[0], BAR_BG[1] ? BAR_BG[1] : win_bg);
-    bar_fg = win_res(db, BAR_FG[0], BAR_FG[1] ? BAR_FG[1] : win_fg);
+    bar_bg = win_get_resource(db, BAR_BG[0], BAR_BG[1] ? BAR_BG[1] : win_bg);
+    bar_fg = win_get_resource(db, BAR_FG[0], BAR_FG[1] ? BAR_FG[1] : win_fg);
     xft_alloc_color(e, bar_bg, &win->bar_bg);
     xft_alloc_color(e, bar_fg, &win->bar_fg);
 
-    f = win_res(db, BAR_FONT[0], BAR_FONT[1] ? BAR_FONT[1] : "monospace-8");
+    f = win_get_resource(db, BAR_FONT[0], BAR_FONT[1] ? BAR_FONT[1] : "monospace-8");
     win_init_font(e, f);
 
     win->bar.l.buf = lbuf;
     win->bar.r.buf = rbuf;
     win->bar.l.size = sizeof(lbuf) - UTF8_PADDING;
     win->bar.r.size = sizeof(rbuf) - UTF8_PADDING;
-    win->bar.h = options->hide_bar ? 0 : barheight;
+    win->bar.h = g_options->hide_bar ? 0 : barheight;
     win->bar.top = TOP_STATUSBAR;
 #endif /* HAVE_LIBFONTS */
 
@@ -199,16 +206,16 @@ void win_open(win_t *win)
     char res_name[] = "nsxiv";
 
     e = &win->env;
-    parent = options->embed ? options->embed : RootWindow(e->dpy, e->scr);
+    parent = g_options->embed ? g_options->embed : RootWindow(e->dpy, e->scr);
 
     sizehints.flags = PWinGravity;
     sizehints.win_gravity = NorthWestGravity;
 
     /* determine window offsets, width & height */
-    if (options->geometry == NULL)
+    if (g_options->geometry == NULL)
         gmask = 0;
     else
-        gmask = XParseGeometry(options->geometry, &win->x, &win->y,
+        gmask = XParseGeometry(g_options->geometry, &win->x, &win->y,
                                &win->w, &win->h);
     if (gmask & WidthValue)
         sizehints.flags |= USSize;
@@ -245,7 +252,7 @@ void win_open(win_t *win)
                               e->depth, InputOutput, e->vis,
                               CWColormap | CWBorderPixel, &attrs);
     if (win->xwin == None)
-        error(EXIT_FAILURE, 0, "Error creating X window");
+        error_quit(EXIT_FAILURE, 0, "Error creating X window");
 
     /* set the _NET_WM_PID */
     pid = getpid();
@@ -269,7 +276,7 @@ void win_open(win_t *win)
             cursors[i].icon = XCreateFontCursor(e->dpy, cursors[i].name);
     }
     if (XAllocNamedColor(e->dpy, e->cmap, "black", &col, &col) == 0)
-        error(EXIT_FAILURE, 0, "Error allocating color 'black'");
+        error_quit(EXIT_FAILURE, 0, "Error allocating color 'black'");
 
     none = XCreateBitmapFromData(e->dpy, win->xwin, none_data, 8, 8);
     *cnone = XCreatePixmapCursor(e->dpy, none, none, &col, &col, 0, 0);
@@ -296,7 +303,7 @@ void win_open(win_t *win)
 
     win_set_title(win, res_name, strlen(res_name));
     classhint.res_class = res_class;
-    classhint.res_name = options->res_name != NULL ? options->res_name : res_name;
+    classhint.res_name = g_options->res_name != NULL ? g_options->res_name : res_name;
     XSetClassHint(e->dpy, win->xwin, &classhint);
 
     XSetWMProtocols(e->dpy, win->xwin, &atoms[ATOM_WM_DELETE_WINDOW], 1);
@@ -312,7 +319,7 @@ void win_open(win_t *win)
     hints.initial_state = NormalState;
     XSetWMHints(win->env.dpy, win->xwin, &hints);
 
-    if (options->fullscreen) {
+    if (g_options->fullscreen) {
         XChangeProperty(e->dpy, win->xwin, atoms[ATOM__NET_WM_STATE],
                         XA_ATOM, 32, PropModeReplace,
                         (unsigned char *)&atoms[ATOM__NET_WM_STATE_FULLSCREEN], 1);
@@ -422,7 +429,7 @@ static int win_draw_text(win_t *win, XftDraw *d, const XftColor *color,
         next = utf8_decode(t, &rune, &err);
         if (err) {
             if (!warned)
-                error(0, 0, "error decoding utf8 status-bar text");
+                error_log(0, "error decoding utf8 status-bar text");
             warned = 1;
             continue;
         }

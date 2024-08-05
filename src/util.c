@@ -17,7 +17,8 @@
  * along with nsxiv.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "nsxiv.h"
+#include "util.h"
+#include "cli_options.h"
 
 #include <assert.h>
 #include <errno.h>
@@ -30,8 +31,11 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+
+extern opt_t *g_options;
 extern char **environ;
 const char *progname = "nsxiv";
+
 
 void *emalloc(size_t size)
 {
@@ -39,9 +43,10 @@ void *emalloc(size_t size)
 
     ptr = malloc(size);
     if (ptr == NULL)
-        error(EXIT_FAILURE, errno, NULL);
+        error_quit(EXIT_FAILURE, errno, NULL);
     return ptr;
 }
+
 
 void *ecalloc(size_t nmemb, size_t size)
 {
@@ -49,17 +54,19 @@ void *ecalloc(size_t nmemb, size_t size)
 
     ptr = calloc(nmemb, size);
     if (ptr == NULL)
-        error(EXIT_FAILURE, errno, NULL);
+        error_quit(EXIT_FAILURE, errno, NULL);
     return ptr;
 }
+
 
 void *erealloc(void *ptr, size_t size)
 {
     ptr = realloc(ptr, size);
     if (ptr == NULL)
-        error(EXIT_FAILURE, errno, NULL);
+        error_quit(EXIT_FAILURE, errno, NULL);
     return ptr;
 }
+
 
 char *estrdup(const char *s)
 {
@@ -67,26 +74,43 @@ char *estrdup(const char *s)
     return memcpy(emalloc(n), s, n);
 }
 
-void error(int eval, int err, const char *fmt, ...)
-{
-    va_list ap;
 
-    if (eval == 0 && options->quiet)
-        exit(eval);
-
+static void log_error(int err_num, const char *msg_fmt, va_list args) {
     fflush(stdout);
     fprintf(stderr, "%s: ", progname);
-    va_start(ap, fmt);
-    if (fmt != NULL)
-        vfprintf(stderr, fmt, ap);
-    va_end(ap);
-    if (err != 0)
-        fprintf(stderr, "%s%s", fmt != NULL ? ": " : "", strerror(err));
-    fputc('\n', stderr);
 
-    if (eval != 0)
-        exit(eval);
+    if (msg_fmt != NULL) {
+        vfprintf(stderr, msg_fmt, args);
+    }
+
+    if (err_num != 0)
+        fprintf(stderr, "%s%s", msg_fmt != NULL ? ": " : "", strerror(err_num));
+    fputc('\n', stderr);
 }
+
+
+void error_quit(int exit_code, int err_num, const char *msg_fmt, ...)
+{
+    va_list ap;
+    va_start(ap, msg_fmt);
+    log_error(err_num, msg_fmt, ap);
+    va_end(ap);
+
+    exit(exit_code);
+}
+
+
+void error_log(int err_num, const char *msg_fmt, ...)
+{
+    if (g_options->quiet)
+        return;
+
+    va_list ap;
+    va_start(ap, msg_fmt);
+    log_error(err_num, msg_fmt, ap);
+    va_end(ap);
+}
+
 
 int r_opendir(r_dir_t *rdir, const char dirname[], bool recursive)
 {
@@ -109,6 +133,7 @@ int r_opendir(r_dir_t *rdir, const char dirname[], bool recursive)
 
     return 0;
 }
+
 
 int r_closedir(r_dir_t *rdir)
 {
@@ -133,6 +158,7 @@ int r_closedir(r_dir_t *rdir)
 
     return ret;
 }
+
 
 char *r_readdir(r_dir_t *rdir, bool skip_dotfiles)
 {
@@ -181,7 +207,7 @@ char *r_readdir(r_dir_t *rdir, bool skip_dotfiles)
             rdir->name = rdir->stack[--rdir->stlen];
             rdir->d = 1;
             if ((rdir->dir = opendir(rdir->name)) == NULL)
-                error(0, errno, "%s", rdir->name);
+                error_log(errno, "%s", rdir->name);
             continue;
         }
         /* no more entries */
@@ -189,6 +215,7 @@ char *r_readdir(r_dir_t *rdir, bool skip_dotfiles)
     }
     return NULL;
 }
+
 
 int r_mkdir(char *path)
 {
@@ -207,7 +234,7 @@ int r_mkdir(char *path)
         *s = '\0';
         if (mkdir(path, 0755) == -1) {
             if (errno != EEXIST || stat(path, &st) == -1 || !S_ISDIR(st.st_mode)) {
-                error(0, errno, "%s", path);
+                error_log(errno, "%s", path);
                 rc = -1;
             }
         }
@@ -215,6 +242,7 @@ int r_mkdir(char *path)
     }
     return rc;
 }
+
 
 void construct_argv(char **argv, unsigned int len, ...)
 {
@@ -228,11 +256,12 @@ void construct_argv(char **argv, unsigned int len, ...)
     assert(argv[len - 1] == NULL && "argv should be NULL terminated");
 }
 
+
 static int mkspawn_pipe(posix_spawn_file_actions_t *fa, const char *cmd, int *pfd, int dupidx, int pipeflags)
 {
     int err = 0;
     if (pipe(pfd) < 0) {
-        error(0, errno, "pipe: %s", cmd);
+        error_log(errno, "pipe: %s", cmd);
         return -1;
     }
     if (pipeflags && (fcntl(pfd[0], F_SETFL, pipeflags) < 0 || fcntl(pfd[1], F_SETFL, pipeflags) < 0))
@@ -241,12 +270,13 @@ static int mkspawn_pipe(posix_spawn_file_actions_t *fa, const char *cmd, int *pf
     err = err ? err : posix_spawn_file_actions_addclose(fa, pfd[0]);
     err = err ? err : posix_spawn_file_actions_addclose(fa, pfd[1]);
     if (err) {
-        error(0, err, "mkspawn_pipe: %s", cmd);
+        error_log(err, "mkspawn_pipe: %s", cmd);
         close(pfd[0]);
         close(pfd[1]);
     }
     return err ? -1 : 0;
 }
+
 
 pid_t spawn(int *readfd, int *writefd, int pipeflags, char *const argv[])
 {
@@ -259,7 +289,7 @@ pid_t spawn(int *readfd, int *writefd, int pipeflags, char *const argv[])
     cmd = argv[0];
 
     if ((err = posix_spawn_file_actions_init(&fa)) != 0) {
-        error(0, err, "spawn: %s", cmd);
+        error_log(err, "spawn: %s", cmd);
         return pid;
     }
 
@@ -269,7 +299,7 @@ pid_t spawn(int *readfd, int *writefd, int pipeflags, char *const argv[])
         goto err_close_readfd;
 
     if ((err = posix_spawnp(&pid, cmd, &fa, NULL, argv, environ)) != 0) {
-        error(0, err, "spawn: %s", cmd);
+        error_log(err, "spawn: %s", cmd);
     } else {
         if (readfd != NULL)
             *readfd = pfd_read[0];

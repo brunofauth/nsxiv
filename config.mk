@@ -17,25 +17,32 @@ HAVE_LIBFONTS = $(OPT_DEP_DEFAULT)
 HAVE_LIBEXIF  = $(OPT_DEP_DEFAULT)
 
 warning_flags := -Wall -Wextra -Wshadow \
-		 -Wredundant-decls -Wstrict-prototypes -Wold-style-definition \
-		 -Wformat=2 -Wwrite-strings -Wno-unused-parameter -Wnested-externs \
+		 -Wredundant-decls -Wwrite-strings -Wstrict-prototypes -Wold-style-definition \
+		 -Wformat -Wformat-security -Wno-unused-parameter -Wnested-externs -Wmissing-noreturn \
+	    	 -Wsuggest-attribute=pure -Wsuggest-attribute=const -Wsuggest-attribute=noreturn \
+                 -Wsuggest-attribute=malloc -Wsuggest-attribute=returns_nonnull \
 		 -pedantic # -Wconversion
 
 ifeq ($(CC),gcc)
     warning_flags += -Wjump-misses-init -Wlogical-op
 endif
-
 analyzer_flags := -fanalyzer
+
 
 # CFLAGS, any additional compiler flags goes here
 # CFLAGS = -I./include -std=c99 $(warning_flags) -O2 -DNDEBUG
+
 # Uncomment for a debug build using gcc/clang
-CFLAGS = -I./include -std=c99 $(warning_flags) $(analyzer_flags) -DDEBUG -g3 \
-	 -fsanitize=address,undefined
-LDFLAGS = -fsanitize=address,undefined
+# CFLAGS = -I./include -std=c99 $(warning_flags) $(analyzer_flags) -DDEBUG -g3 \
+# 	 -fsanitize=address,undefined
+# LDFLAGS = -fsanitize=address,undefined
+CFLAGS = -I./include -std=c99 $(warning_flags) $(analyzer_flags) -DDEBUG -g3
+LDFLAGS =
+
 
 # icons that will be installed via `make icon`
 ICONS = 16x16.png 32x32.png 48x48.png 64x64.png 128x128.png
+
 
 # Uncomment on OpenBSD
 # HAVE_INOTIFY = 0

@@ -17,11 +17,15 @@
  * along with nsxiv.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "nsxiv.h"
-#include <Imlib2.h>
+#include "thumbs.h"
+
+#include "cli_options.h"
+#include "image.h"
+#include "util.h"
 #define INCLUDE_THUMBS_CONFIG
 #include "config.h"
 
+#include <Imlib2.h>
 #include <assert.h>
 #include <errno.h>
 #include <stdio.h>
@@ -40,10 +44,9 @@ static char *g_cache_dir;
 static char *g_cache_tmpfile;
 static char *g_cache_tmpfile_base;
 static const char TMP_NAME[] = "/nsxiv-XXXXXX";
+extern opt_t *g_options;
 
 
-static char *tns_cache_translate_fp(const char filepath[])
-        __attribute__((nonnull (1)));
 static char *tns_cache_translate_fp(const char filepath[])
 {
     char *cfile = NULL;
@@ -59,28 +62,30 @@ static char *tns_cache_translate_fp(const char filepath[])
     return cfile;
 }
 
-static Imlib_Image tns_cache_load(const char filepath[], bool *outdated)
-        __attribute__((nonnull (1)));
+
 static Imlib_Image tns_cache_load(const char filepath[], bool *outdated)
 {
-    char *cfile;
-    struct stat cstats, fstats;
+    char *cached_file_path;
+    struct stat stats_cached_file;
+    struct stat stats_requested_file;
     Imlib_Image im = NULL;
 
-    if (stat(filepath, &fstats) < 0)
+    if (stat(filepath, &stats_requested_file) < 0)
+        return NULL;
+    if ((cached_file_path = tns_cache_translate_fp(filepath)) == NULL)
         return NULL;
 
-    if ((cfile = tns_cache_translate_fp(filepath)) != NULL) {
-        if (stat(cfile, &cstats) == 0) {
-            if (cstats.st_mtime == fstats.st_mtime)
-                im = imlib_load_image(cfile);
-            else
-                *outdated = true;
-        }
-        free(cfile);
+    if (stat(cached_file_path, &stats_cached_file) == 0) {
+        if (stats_cached_file.st_mtime == stats_requested_file.st_mtime)
+            im = imlib_load_image(cached_file_path);
+        else
+            *outdated = true;
     }
+
+    free(cached_file_path);
     return im;
 }
+
 
 static void tns_cache_write(Imlib_Image im, const char filepath[], const bool force)
     __attribute__((nonnull (1, 2)));
@@ -92,7 +97,7 @@ static void tns_cache_write(Imlib_Image im, const char filepath[], const bool fo
     struct utimbuf times;
     Imlib_Load_Error err;
 
-    if (options->private_mode)
+    if (g_options->private_mode)
         return;
 
     if (stat(filepath, &fstats) < 0)
@@ -132,11 +137,12 @@ end:
     }
 }
 
+
 void tns_clean_cache(void)
 {
     r_dir_t dir;
     if (r_opendir(&dir, g_cache_dir, true) < 0) {
-        error(0, errno, "%s", g_cache_dir);
+        error_log(errno, "%s", g_cache_dir);
         return;
     }
 
@@ -146,19 +152,27 @@ void tns_clean_cache(void)
         char *filename = cfile + dirlen;
         if (access(filename, F_OK) < 0) {
             if (unlink(cfile) < 0)
-                error(0, errno, "%s", cfile);
+                error_log(errno, "%s", cfile);
         }
         free(cfile);
     }
     r_closedir(&dir);
 }
 
-float clamp(float n, float min, float max) {
-    const float t = n < min ? min : n;
-    return t > max ? max : t;
+
+typedef struct {
+    float min;
+    float max;
+} FloatRange;
+
+
+static inline float clamp(float n, FloatRange range) {
+    const float t = n < range.min ? range.min : n;
+    return t > range.max ? range.max : t;
 }
 
-void _transform_mark_color_modifier(tns_t *tns) {
+
+static void transform_mark_color_modifier(ThumbnailState *tns) {
     float af[256], rf[256], gf[256], bf[256];
     for (int i = 255; i >= 0; i--)
         rf [i] = gf [i] = bf [i] = af [i] = (float) i / 255;
@@ -178,14 +192,15 @@ void _transform_mark_color_modifier(tns_t *tns) {
             af[i] *= MCM_TINT[MCM_A];
 
     for (int i = 255; i != 0 ; i--) {
-        tns->mcm->r[i] = clamp(rf[i], 0, 1) * 255;
-        tns->mcm->g[i] = clamp(gf[i], 0, 1) * 255;
-        tns->mcm->b[i] = clamp(bf[i], 0, 1) * 255;
-        tns->mcm->a[i] = clamp(af[i], 0, 1) * 255;
+        tns->mark_cm->r[i] = clamp(rf[i], (FloatRange){.min=0, .max=1}) * 255;
+        tns->mark_cm->g[i] = clamp(gf[i], (FloatRange){.min=0, .max=1}) * 255;
+        tns->mark_cm->b[i] = clamp(bf[i], (FloatRange){.min=0, .max=1}) * 255;
+        tns->mark_cm->a[i] = clamp(af[i], (FloatRange){.min=0, .max=1}) * 255;
     }
 }
 
-void tns_init(tns_t *tns, fileinfo_t *tns_files, const int *thumbnail_count, int *sel, win_t *win)
+
+void tns_init(ThumbnailState *tns, fileinfo_t *tns_files, const int *thumbnail_count, int *sel, win_t *win)
 {
     tns->thumbs = (thumbnail_count == NULL || *thumbnail_count <= 0)
         ? NULL
@@ -202,17 +217,17 @@ void tns_init(tns_t *tns, fileinfo_t *tns_files, const int *thumbnail_count, int
     tns->zoom_level = THUMB_SIZE;
     tns_zoom(tns, 0);
 
-    markcolormod_t *table = emalloc(sizeof(markcolormod_t));
+    ColorModifier *table = emalloc(sizeof(*tns->mark_cm));
     for (int i = 255; i >= 0; i--)
         table->a[i] = table->r[i] = table->g[i] = table->b[i] = i;
-    tns->mcm = table;
-    _transform_mark_color_modifier(tns);
+    tns->mark_cm = table;
+    transform_mark_color_modifier(tns);
 
     const char *homedir = getenv("XDG_CACHE_HOME");
     const char *dsuffix = "";
     if (homedir == NULL || homedir[0] == '\0') {
         if ((homedir = getenv("HOME")) == NULL)
-            error(EXIT_FAILURE, 0, "Cache directory not found");
+            error_quit(EXIT_FAILURE, 0, "Cache directory not found");
         dsuffix = "/.cache";
     }
 
@@ -226,7 +241,8 @@ void tns_init(tns_t *tns, fileinfo_t *tns_files, const int *thumbnail_count, int
     g_cache_tmpfile_base = g_cache_tmpfile + len - 1;
 }
 
-CLEANUP void tns_free(tns_t *tns)
+
+CLEANUP void tns_free(ThumbnailState *tns)
 {
     if (tns->thumbs != NULL) {
         for (int32_t i = 0; i < *tns->cnt; i++)
@@ -235,22 +251,23 @@ CLEANUP void tns_free(tns_t *tns)
         tns->thumbs = NULL;
     }
 
-    free(tns->mcm);
+    free(tns->mark_cm);
     free(g_cache_dir);
     g_cache_dir = NULL;
     free(g_cache_tmpfile);
     g_cache_tmpfile = g_cache_tmpfile_base = NULL;
 }
 
-CLEANUP void tns_replace(tns_t *tns, fileinfo_t *tns_files, const int *cnt, int *sel, win_t *win, replaceflags_t flags)
+
+CLEANUP void tns_replace(ThumbnailState *tns, fileinfo_t *tns_files, const int *cnt, int *sel, win_t *win, replaceflags_t flags)
 {
     int zoom_level = THUMB_SIZE;
     if (flags & RF_KEEP_ZOOM_LEVEL)
         zoom_level = tns->zoom_level;
-    markcolormod_t *mark_mod = NULL;
+    ColorModifier *mark_mod = NULL;
     if (flags & RF_KEEP_MARK_COLOR_MOD) {
-        mark_mod = tns->mcm;
-        tns->mcm = NULL;
+        mark_mod = tns->mark_cm;
+        tns->mark_cm = NULL;
     }
 
     tns_free(tns);
@@ -271,20 +288,20 @@ CLEANUP void tns_replace(tns_t *tns, fileinfo_t *tns_files, const int *cnt, int 
     tns_zoom(tns, 0);
 
     if (mark_mod != NULL) {
-        tns->mcm = mark_mod;
+        tns->mark_cm = mark_mod;
     } else {
-        markcolormod_t *table = emalloc(sizeof(markcolormod_t));
+        ColorModifier *table = emalloc(sizeof(ColorModifier));
         for (int i = 255; i >= 0; i--)
             table->a[i] = table->r[i] = table->g[i] = table->b[i] = i;
-        tns->mcm = table;
-        _transform_mark_color_modifier(tns);
+        tns->mark_cm = table;
+        transform_mark_color_modifier(tns);
     }
 
     const char *homedir = getenv("XDG_CACHE_HOME");
     const char *dsuffix = "";
     if (homedir == NULL || homedir[0] == '\0') {
         if ((homedir = getenv("HOME")) == NULL)
-            error(EXIT_FAILURE, 0, "Cache directory not found");
+            error_quit(EXIT_FAILURE, 0, "Cache directory not found");
         dsuffix = "/.cache";
     }
 
@@ -297,6 +314,7 @@ CLEANUP void tns_replace(tns_t *tns, fileinfo_t *tns_files, const int *cnt, int 
     memcpy(g_cache_tmpfile, g_cache_dir, len - 1);
     g_cache_tmpfile_base = g_cache_tmpfile + len - 1;
 }
+
 
 static Imlib_Image tns_scale_down(Imlib_Image im, int max_side_size)
 {
@@ -320,7 +338,7 @@ static Imlib_Image tns_scale_down(Imlib_Image im, int max_side_size)
         0, 0, w, h,
         MAX(scale * w, 1), MAX(scale * h, 1));
     if (im == NULL)
-        error(EXIT_FAILURE, ENOMEM, NULL);
+        error_quit(EXIT_FAILURE, ENOMEM, NULL);
     imlib_free_image_and_decache();
 
     return im;
@@ -328,7 +346,7 @@ static Imlib_Image tns_scale_down(Imlib_Image im, int max_side_size)
 
 // Besides loading thumbnails, this function also advances `next_to_init` and `next_to_load_in_view`
 // Returns true if thumbnail was successfully loaded
-bool tns_load(tns_t *tns, int n, bool force, bool cache_only)
+bool tns_load(ThumbnailState *tns, int n, bool force, bool cache_only)
 {
     if (n < 0 || n >= *tns->cnt)
         return false;
@@ -341,16 +359,15 @@ bool tns_load(tns_t *tns, int n, bool force, bool cache_only)
     img_free(thumbnail->im, false);
     thumbnail->im = NULL;
 
-    int maxwh = thumb_sizes[ARRLEN(thumb_sizes) - 1];
+    int max_tn_wh = thumb_sizes[ARRLEN(thumb_sizes) - 1];
     bool cache_hit = false;
     Imlib_Image im = NULL;
 
     if (!force) {
-        if ((im = tns_cache_load(file->path, &force)) != NULL) {
+        bool is_outdated;
+        if ((im = tns_cache_load(file->path, &is_outdated)) != NULL) {
             imlib_context_set_image(im);
-            if (imlib_image_get_width() < maxwh &&
-                imlib_image_get_height() < maxwh)
-            {
+            if (imlib_image_get_width() < max_tn_wh && imlib_image_get_height() < max_tn_wh) {
                 char *cfile = tns_cache_translate_fp(file->path);
                 if (cfile != NULL) {
                     unlink(cfile);
@@ -362,7 +379,7 @@ bool tns_load(tns_t *tns, int n, bool force, bool cache_only)
                 cache_hit = true;
             }
 #if HAVE_LIBEXIF
-        } else if (!force && !options->private_mode) {
+        } else if (!is_outdated && !g_options->private_mode) {
             ExifData *exif_data;
             /* UPGRADE: Imlib2 v1.10.0: avoid tempfile and use imlib_load_image_mem() */
             if ((exif_data = exif_data_new_from_file(file->path)) == NULL) {
@@ -410,9 +427,9 @@ bool tns_load(tns_t *tns, int n, bool force, bool cache_only)
                         h = ph;
                     }
                 }
-                if (w >= maxwh || h >= maxwh) {
+                if (w >= max_tn_wh || h >= max_tn_wh) {
                     if ((im = imlib_create_cropped_image(x, y, w, h)) == NULL)
-                        error(0, 0, "%s: error generating thumbnail", file->name);
+                        error_log(0, "%s: error generating thumbnail", file->name);
                 }
                 imlib_free_image_and_decache();
             }
@@ -436,10 +453,10 @@ bool tns_load(tns_t *tns, int n, bool force, bool cache_only)
 #if HAVE_LIBEXIF
         exif_auto_orientate(file);
 #endif
-        im = tns_scale_down(im, maxwh);
+        im = tns_scale_down(im, max_tn_wh);
         imlib_context_set_image(im);
                 // If the image is smaller than maxwh in both dims, we dont even cache it
-        if (imlib_image_get_width() == maxwh || imlib_image_get_height() == maxwh)
+        if (imlib_image_get_width() == max_tn_wh || imlib_image_get_height() == max_tn_wh)
             tns_cache_write(im, file->path, true);
     }
 
@@ -466,7 +483,8 @@ bool tns_load(tns_t *tns, int n, bool force, bool cache_only)
     return true;
 }
 
-void tns_unload(tns_t *tns, int n)
+
+void tns_unload(ThumbnailState *tns, int n)
 {
     thumb_t *t;
 
@@ -477,7 +495,8 @@ void tns_unload(tns_t *tns, int n)
     t->im = NULL;
 }
 
-static void tns_check_view(tns_t *tns, const bool scrolled)
+
+static void tns_check_view(ThumbnailState *tns, const bool scrolled)
 {
     assert(tns != NULL);
     tns->visible_thumbs.start -= tns->visible_thumbs.start % tns->cols;
@@ -501,7 +520,8 @@ static void tns_check_view(tns_t *tns, const bool scrolled)
     }
 }
 
-void tns_render(tns_t *tns)
+
+void tns_render(ThumbnailState *tns)
 {
     if (!tns->dirty)
         return;
@@ -555,7 +575,7 @@ void tns_render(tns_t *tns)
             tns->next_to_load_in_view = MIN(tns->next_to_load_in_view, i);
         } else {
             imlib_context_set_image(thumbnail->im);
-            if (square_thumbs) {
+            if (g_square_thumbs) {
                 int size = MIN(thumbnail->w, thumbnail->h);
                 int tn_x = (thumbnail->w < thumbnail->h) ? 0 : (thumbnail->w - thumbnail->h) / 2;
                 int tn_y = (thumbnail->w > thumbnail->h) ? 0 : (thumbnail->h - thumbnail->w) / 2;
@@ -589,17 +609,18 @@ void tns_render(tns_t *tns)
     tns_highlight(tns, *tns->sel, true);
 }
 
+
 // Imlib has actual filters, but I couldn't figure out how they work, so I just
 // reimplemented that functionality (probably in a worse way)
-Imlib_Image apply_filters(Imlib_Image src, markcolormod_t *table) {
+Imlib_Image apply_filters(Imlib_Image src, ColorModifier *table) {
     imlib_context_set_image(src);
     Imlib_Image clone;
     if (!(clone = imlib_clone_image()))
-        error(EXIT_FAILURE, 0, "Couldn't apply filters to image");
+        error_quit(EXIT_FAILURE, 0, "Couldn't apply filters to image");
     imlib_context_set_image(clone);
     Imlib_Color_Modifier color_modifier;
     if (!(color_modifier = imlib_create_color_modifier()))
-        error(EXIT_FAILURE, 0, "Couldn't apply filters to image");
+        error_quit(EXIT_FAILURE, 0, "Couldn't apply filters to image");
     imlib_context_set_color_modifier(color_modifier);
     imlib_set_color_modifier_tables(table->r, table->g, table->b, table->a);
     imlib_apply_color_modifier();
@@ -607,7 +628,8 @@ Imlib_Image apply_filters(Imlib_Image src, markcolormod_t *table) {
     return clone;
 }
 
-void tns_mark(tns_t *tns, int n, bool mark)
+
+void tns_mark(ThumbnailState *tns, int n, bool mark)
 {
     if (n < 0 || n >= *tns->cnt || tns->thumbs[n].im == NULL)
         return;
@@ -616,7 +638,7 @@ void tns_mark(tns_t *tns, int n, bool mark)
     Imlib_Image filtered = NULL;
 
     if (mark) {
-        filtered = apply_filters(thumbnail->im, tns->mcm);
+        filtered = apply_filters(thumbnail->im, tns->mark_cm);
         imlib_context_set_image(filtered);
     } else {
         imlib_context_set_image(thumbnail->im);
@@ -627,7 +649,7 @@ void tns_mark(tns_t *tns, int n, bool mark)
     int mark_h = cell_side / 3;
     int mark_x, mark_y;
 
-    if (square_thumbs) {
+    if (g_square_thumbs) {
         mark_x = thumbnail->x - mark_w/2 + cell_side/2;
         mark_y = thumbnail->y - mark_h/2 + cell_side/2;
         int size = MIN(thumbnail->w, thumbnail->h);
@@ -657,7 +679,8 @@ void tns_mark(tns_t *tns, int n, bool mark)
         free(filtered);
 }
 
-void tns_highlight(tns_t *tns, int n, bool hl)
+
+void tns_highlight(ThumbnailState *tns, int n, bool hl)
 {
     if (n < 0 || n >= *tns->cnt || tns->thumbs[n].im == NULL)
         return;
@@ -669,7 +692,7 @@ void tns_highlight(tns_t *tns, int n, bool hl)
     int offset_wh = tns->border_width + 2;
     int cell_side = thumb_sizes[tns->zoom_level];
 
-    if (square_thumbs) {
+    if (g_square_thumbs) {
         int w = thumbnail->w + offset_wh;
         int h = thumbnail->h + offset_wh;
         int size = MAX(MIN(w, h), cell_side);
@@ -691,7 +714,8 @@ void tns_highlight(tns_t *tns, int n, bool hl)
     }
 }
 
-bool tns_move_selection(tns_t *tns, const direction_t dir, int cnt)
+
+bool tns_move_selection(ThumbnailState *tns, const direction_t dir, int cnt)
 {
     int max;
 
@@ -724,7 +748,8 @@ bool tns_move_selection(tns_t *tns, const direction_t dir, int cnt)
     return *tns->sel != old;
 }
 
-bool tns_scroll(tns_t *tns, const direction_t dir, const bool whole_screen)
+
+bool tns_scroll(ThumbnailState *tns, const direction_t dir, const bool whole_screen)
 {
     int old_visible_thumb_start = tns->visible_thumbs.start;
     int d = tns->cols * (whole_screen ? tns->rows : 1);
@@ -745,7 +770,8 @@ bool tns_scroll(tns_t *tns, const direction_t dir, const bool whole_screen)
     return tns->visible_thumbs.start != old_visible_thumb_start;
 }
 
-bool tns_zoom(tns_t *tns, const int d)
+
+bool tns_zoom(ThumbnailState *tns, const int d)
 {
     int old_zoom_level = tns->zoom_level;
     tns->zoom_level += -(d < 0) + (d > 0);
@@ -765,7 +791,8 @@ bool tns_zoom(tns_t *tns, const int d)
     return tns->zoom_level != old_zoom_level;
 }
 
-int tns_translate(tns_t *tns, const int x, const int y)
+
+int tns_translate(ThumbnailState *tns, const int x, const int y)
 {
     if (x < tns->x || y < tns->y)
         return -1;
@@ -780,8 +807,9 @@ int tns_translate(tns_t *tns, const int x, const int y)
     return n;
 }
 
+
 bool tns_toggle_squared(void)
 {
-    square_thumbs = !square_thumbs;
+    g_square_thumbs = !g_square_thumbs;
     return true;
 }

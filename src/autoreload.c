@@ -21,6 +21,9 @@
 
 #if HAVE_INOTIFY
 
+#include "autoreload.h"
+#include "util.h"
+
 #include <assert.h>
 #include <errno.h>
 #include <stdlib.h>
@@ -28,25 +31,29 @@
 #include <sys/inotify.h>
 #include <unistd.h>
 
+
 static struct {
     char *buf;
     size_t len;
 } scratch;
 
-void autoreload_init(arl_t *arl)
+
+void autoreload_init(AutoreloadState *arl)
 {
     arl->fd = inotify_init1(IN_CLOEXEC | IN_NONBLOCK);
     arl->wd_dir = arl->wd_file = -1;
     if (arl->fd == -1)
-        error(0, 0, "Could not initialize inotify, no automatic image reloading");
+        error_log(0, "Could not initialize inotify, no automatic image reloading");
 }
 
-CLEANUP void autoreload_cleanup(arl_t *arl)
+
+CLEANUP void autoreload_cleanup(AutoreloadState *arl)
 {
     if (arl->fd != -1)
         close(arl->fd);
     free(scratch.buf);
 }
+
 
 static void rm_watch(int fd, int *wd)
 {
@@ -56,14 +63,16 @@ static void rm_watch(int fd, int *wd)
     }
 }
 
+
 static void add_watch(int fd, int *wd, const char *path, uint32_t mask)
 {
     *wd = inotify_add_watch(fd, path, mask);
     if (*wd == -1)
-        error(0, errno, "inotify: %s", path);
+        error_log(errno, "inotify: %s", path);
 }
 
-static char *arl_scratch_push(const char *filepath, size_t len)
+
+static char *autoreload_scratch_push(const char *filepath, size_t len)
 {
     if (scratch.len < len + 1) {
         scratch.len = len + 1;
@@ -73,7 +82,8 @@ static char *arl_scratch_push(const char *filepath, size_t len)
     return memcpy(scratch.buf, filepath, len);
 }
 
-void autoreload_add(arl_t *arl, const char *filepath)
+
+void autoreload_add(AutoreloadState *arl, const char *filepath)
 {
     if (arl->fd == -1)
         return;
@@ -84,12 +94,13 @@ void autoreload_add(arl_t *arl, const char *filepath)
 
     const char *base = strrchr(filepath, '/');
     assert(base != NULL && "filepath must be result of realpath(3)");
-    const char *dir = arl_scratch_push(filepath, MAX(base - filepath, 1));
+    const char *dir = autoreload_scratch_push(filepath, MAX(base - filepath, 1));
     add_watch(arl->fd, &arl->wd_dir, dir, IN_CREATE | IN_MOVED_TO);
-    arl->filename = arl_scratch_push(base + 1, strlen(base + 1));
+    arl->filename = autoreload_scratch_push(base + 1, strlen(base + 1));
 }
 
-bool autoreload_handle_events(arl_t *arl)
+
+bool autoreload_handle_events(AutoreloadState *arl)
 {
     bool reload = false;
     const struct inotify_event *inotify_event;
@@ -123,28 +134,28 @@ bool autoreload_handle_events(arl_t *arl)
     return reload;
 }
 
-#else
+#else // HAVE_INOTIFY
 
-void arl_init(arl_t *arl)
+void autoreload_init(AutoreloadState *arl)
 {
     arl->fd = -1;
 }
 
-void arl_cleanup(arl_t *arl)
+void autoreload_cleanup(AutoreloadState *arl)
 {
     (void)arl;
 }
 
-void arl_add(arl_t *arl, const char *filepath)
+void autoreload_add(AutoreloadState *arl, const char *filepath)
 {
     (void)arl;
     (void)filepath;
 }
 
-bool arl_handle(arl_t *arl)
+bool autoreload_handle(AutoreloadState *arl)
 {
     (void)arl;
     return false;
 }
 
-#endif /* HAVE_INOTIFY */
+#endif // HAVE_INOTIFY
