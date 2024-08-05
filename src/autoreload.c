@@ -43,7 +43,7 @@ void autoreload_init(AutoreloadState *arl)
     arl->fd = inotify_init1(IN_CLOEXEC | IN_NONBLOCK);
     arl->wd_dir = arl->wd_file = -1;
     if (arl->fd == -1)
-        error(0, 0, "Could not initialize inotify, no automatic image reloading");
+        error_log(0, "Could not initialize inotify, no automatic image reloading");
 }
 
 
@@ -68,7 +68,7 @@ static void add_watch(int fd, int *wd, const char *path, uint32_t mask)
 {
     *wd = inotify_add_watch(fd, path, mask);
     if (*wd == -1)
-        error(0, errno, "inotify: %s", path);
+        error_log(errno, "inotify: %s", path);
 }
 
 

@@ -65,6 +65,7 @@ static int calc_cache_size(void)
     return MIN(cache, CACHE_SIZE_LIMIT);
 }
 
+
 void img_init(SxivImage *img, win_t *win)
 {
     imlib_context_set_display(win->env.dpy);
@@ -150,6 +151,7 @@ static void img_area_clear(int x, int y, int w, int h)
     imlib_image_fill_rectangle(x, y, w, h);
 }
 
+
 static bool img_load_multiframe(SxivImage *img, const fileinfo_t *file)
 {
     unsigned int n, fcnt;
@@ -171,7 +173,7 @@ static bool img_load_multiframe(SxivImage *img, const fileinfo_t *file)
     }
 
     if ((blank = imlib_create_image(img->w, img->h)) == NULL) {
-        error(0, 0, "%s: couldn't create image", file->name);
+        error_log(0, "%s: couldn't create image", file->name);
         return false;
     }
     imlib_context_set_image(blank);
@@ -208,7 +210,7 @@ static bool img_load_multiframe(SxivImage *img, const fileinfo_t *file)
         {
             img_free(frame, false);
             img_free(canvas, false);
-            error(0, 0, "%s: failed to load frame %d", file->name, n);
+            error_log(0, "%s: failed to load frame %d", file->name, n);
             break;
         }
 
@@ -280,9 +282,10 @@ Imlib_Image img_open(const fileinfo_t *file)
     /* UPGRADE: Imlib2 v1.10.0: better error reporting with
      * imlib_get_error() + imlib_strerror() */
     if (im == NULL && (file->flags & FF_WARN))
-        error(0, 0, "%s: Error opening image", file->name);
+        error_log(0, "%s: Error opening image", file->name);
     return im;
 }
+
 
 bool img_load(SxivImage *img, const fileinfo_t *file)
 {
@@ -329,6 +332,7 @@ bool img_load(SxivImage *img, const fileinfo_t *file)
     return true;
 }
 
+
 CLEANUP void img_free(Imlib_Image im, const bool decache)
 {
     if (im != NULL) {
@@ -336,6 +340,7 @@ CLEANUP void img_free(Imlib_Image im, const bool decache)
         decache ? imlib_free_image_and_decache() : imlib_free_image();
     }
 }
+
 
 CLEANUP void img_close(SxivImage *img, const bool decache)
 {
@@ -368,6 +373,7 @@ CLEANUP void img_close(SxivImage *img, const bool decache)
     }
 }
 
+
 static void img_check_pan(SxivImage *img, const bool moved)
 {
     const win_t *win = img->win;
@@ -393,6 +399,7 @@ static void img_check_pan(SxivImage *img, const bool moved)
     if (!moved && (ox != img->x || oy != img->y))
         img->flags |= IF_IS_DIRTY;
 }
+
 
 static bool img_fit(SxivImage *img)
 {
@@ -420,14 +427,14 @@ static bool img_fit(SxivImage *img)
     }
     z = MIN(z, img->scalemode == SCALE_DOWN ? 1.0 : ZOOM_MAX);
 
-    if (ABS(img->zoom - z) > 1.0 / MAX(img->w, img->h)) {
-        img->zoom = z;
-        img->flags |= IF_IS_DIRTY;
-        return true;
-    } else {
+    if (ABS(img->zoom - z) <= (1.0 / MAX(img->w, img->h)))
         return false;
-    }
+
+    img->zoom = z;
+    img->flags |= IF_IS_DIRTY;
+    return true;
 }
+
 
 void img_render(SxivImage *img)
 {
@@ -448,7 +455,7 @@ void img_render(SxivImage *img)
      */
     int sx, sw, dx, dw;
     if (img->x <= 0) {
-        sx = -img->x / img->zoom + 0.5;
+        sx = (int)(-img->x / img->zoom + 0.5);
         sw = win->w / img->zoom;
         dx = 0;
         dw = win->w;
@@ -461,7 +468,7 @@ void img_render(SxivImage *img)
 
     int sy, sh, dy, dh;
     if (img->y <= 0) {
-        sy = -img->y / img->zoom + 0.5;
+        sy = (int)(-img->y / img->zoom + 0.5);
         sh = win->h / img->zoom;
         dy = win->bar.top ? win->bar.h : 0;
         dh = win->h;
@@ -484,7 +491,7 @@ void img_render(SxivImage *img)
     if (imlib_image_has_alpha()) {
         Imlib_Image bg = imlib_create_image(dw, dh);
         if (bg == NULL) {
-            error(0, ENOMEM, "Failed to create image");
+            error_log(ENOMEM, "Failed to create image");
             goto fallback;
         }
         imlib_context_set_image(bg);
@@ -523,6 +530,7 @@ fallback:
     img->flags &= ~IF_IS_DIRTY;
 }
 
+
 bool img_fit_win(SxivImage *img, scalemode_t sm)
 {
     float oz;
@@ -530,37 +538,39 @@ bool img_fit_win(SxivImage *img, scalemode_t sm)
     oz = img->zoom;
     img->scalemode = sm;
 
-    if (img_fit(img)) {
-        img->x = img->win->w / 2 - (img->win->w / 2 - img->x) * img->zoom / oz;
-        img->y = img->win->h / 2 - (img->win->h / 2 - img->y) * img->zoom / oz;
-        img->flags |= IF_CHECKPAN;
-        return true;
-    } else {
+    if (!img_fit(img))
         return false;
-    }
+
+    img->x = img->win->w / 2 - (img->win->w / 2 - img->x) * img->zoom / oz;
+    img->y = img->win->h / 2 - (img->win->h / 2 - img->y) * img->zoom / oz;
+    img->flags |= IF_CHECKPAN;
+    return true;
 }
+
 
 bool img_zoom_to(SxivImage *img, float z)
 {
     int x, y;
-    if (ZOOM_MIN <= z && z <= ZOOM_MAX) {
-        win_cursor_pos(img->win, &x, &y);
-        if (x < 0 || (unsigned int)x >= img->win->w ||
-            y < 0 || (unsigned int)y >= img->win->h)
-        {
-            x = img->win->w / 2;
-            y = img->win->h / 2;
-        }
-        img->x = x - (x - img->x) * z / img->zoom;
-        img->y = y - (y - img->y) * z / img->zoom;
-        img->zoom = z;
-        img->scalemode = SCALE_ZOOM;
-        img->flags |= IF_CHECKPAN | IF_IS_DIRTY;
-        return true;
-    } else {
+    if (ZOOM_MIN > z || z > ZOOM_MAX)
         return false;
+
+    win_cursor_pos(img->win, &x, &y);
+    if (x < 0
+        || (unsigned int)x >= img->win->w
+        || y < 0 || (unsigned int)y >= img->win->h
+    ) {
+        x = img->win->w / 2;
+        y = img->win->h / 2;
     }
+    img->x = x - (x - img->x) * z / img->zoom;
+    img->y = y - (y - img->y) * z / img->zoom;
+    img->zoom = z;
+    img->scalemode = SCALE_ZOOM;
+    img->flags |= IF_CHECKPAN | IF_IS_DIRTY;
+
+    return true;
 }
+
 
 bool img_zoom(SxivImage *img, int d)
 {
@@ -574,7 +584,8 @@ bool img_zoom(SxivImage *img, int d)
     return img_zoom_to(img, zoom_levels[i] / 100);
 }
 
-bool img_pos(SxivImage *img, float x, float y)
+
+bool img_set_position(SxivImage *img, float x, float y)
 {
     float ox, oy;
 
@@ -589,15 +600,16 @@ bool img_pos(SxivImage *img, float x, float y)
     if (ox != img->x || oy != img->y) {
         img->flags |= IF_IS_DIRTY;
         return true;
-    } else {
-        return false;
     }
+    return false;
 }
+
 
 static bool img_move(SxivImage *img, float dx, float dy)
 {
-    return img_pos(img, img->x + dx, img->y + dy);
+    return img_set_position(img, img->x + dx, img->y + dy);
 }
+
 
 bool img_pan(SxivImage *img, direction_t dir, int d)
 {
@@ -615,25 +627,23 @@ bool img_pan(SxivImage *img, direction_t dir, int d)
     }
 
     switch (dir) {
-    case DIR_LEFT:
-        return img_move(img, x, 0.0);
-    case DIR_RIGHT:
-        return img_move(img, -x, 0.0);
-    case DIR_UP:
-        return img_move(img, 0.0, y);
-    case DIR_DOWN:
-        return img_move(img, 0.0, -y);
+    case DIR_LEFT:  return img_move(img, x, 0.0);
+    case DIR_RIGHT: return img_move(img, -x, 0.0);
+    case DIR_UP:    return img_move(img, 0.0, y);
+    case DIR_DOWN:  return img_move(img, 0.0, -y);
     }
     return false;
 }
+
 
 bool img_pan_center(SxivImage *img)
 {
     float x, y;
     x = (img->win->w - img->w * img->zoom) / 2.0;
     y = (img->win->h - img->h * img->zoom) / 2.0;
-    return img_pos(img, x, y);
+    return img_set_position(img, x, y);
 }
+
 
 bool img_pan_edge(SxivImage *img, direction_t dir)
 {
@@ -652,15 +662,13 @@ bool img_pan_edge(SxivImage *img, direction_t dir)
         img->y = img->win->h - img->h * img->zoom;
 
     img_check_pan(img, true);
-
-    if (ox != img->x || oy != img->y) {
-        img->flags |= IF_IS_DIRTY;
-
-        return true;
-    } else {
+    if (ox == img->x && oy == img->y)
         return false;
-    }
+
+    img->flags |= IF_IS_DIRTY;
+    return true;
 }
+
 
 void img_rotate(SxivImage *img, degree_t d)
 {
@@ -688,6 +696,7 @@ void img_rotate(SxivImage *img, degree_t d)
     img->flags |= IF_IS_DIRTY;
 }
 
+
 void img_flip(SxivImage *img, flipdir_t d)
 {
     unsigned int i;
@@ -714,6 +723,7 @@ void img_flip(SxivImage *img, flipdir_t d)
     img->flags |= IF_IS_DIRTY;
 }
 
+
 void img_toggle_antialias(SxivImage *img)
 {
     img->flags = (img->flags & ~IF_ANTI_ALIAS_ENABLED) | (~img->flags & IF_ANTI_ALIAS_ENABLED);
@@ -722,10 +732,12 @@ void img_toggle_antialias(SxivImage *img)
     img->flags |= IF_IS_DIRTY;
 }
 
+
 static double steps_to_range(int d, double max, double offset)
 {
     return offset + d * ((d <= 0 ? 1.0 : (max - 1.0)) / CC_STEPS);
 }
+
 
 void img_update_color_modifiers(SxivImage *img)
 {
@@ -742,6 +754,7 @@ void img_update_color_modifiers(SxivImage *img)
     img->flags |= IF_IS_DIRTY;
 }
 
+
 bool img_change_color_modifier(SxivImage *img, int d, int *target)
 {
     int value = d == 0 ? 0 : MIN(MAX(*target + d, -CC_STEPS), CC_STEPS);
@@ -753,6 +766,7 @@ bool img_change_color_modifier(SxivImage *img, int d, int *target)
     img_update_color_modifiers(img);
     return true;
 }
+
 
 static bool img_frame_goto(SxivImage *img, int n)
 {
@@ -770,6 +784,7 @@ static bool img_frame_goto(SxivImage *img, int n)
     return true;
 }
 
+
 bool img_frame_navigate(SxivImage *img, int d)
 {
     if (img->multi.cnt == 0 || d == 0)
@@ -781,10 +796,10 @@ bool img_frame_navigate(SxivImage *img, int d)
     return img_frame_goto(img, d);
 }
 
+
 bool img_frame_animate(SxivImage *img)
 {
-    if (img->multi.cnt > 0)
-        return img_frame_goto(img, (img->multi.sel + 1) % img->multi.cnt);
-    else
+    if (img->multi.cnt == 0)
         return false;
+    return img_frame_goto(img, (img->multi.sel + 1) % img->multi.cnt);
 }

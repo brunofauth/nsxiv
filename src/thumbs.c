@@ -141,7 +141,7 @@ void tns_clean_cache(void)
 {
     r_dir_t dir;
     if (r_opendir(&dir, g_cache_dir, true) < 0) {
-        error(0, errno, "%s", g_cache_dir);
+        error_log(errno, "%s", g_cache_dir);
         return;
     }
 
@@ -151,7 +151,7 @@ void tns_clean_cache(void)
         char *filename = cfile + dirlen;
         if (access(filename, F_OK) < 0) {
             if (unlink(cfile) < 0)
-                error(0, errno, "%s", cfile);
+                error_log(errno, "%s", cfile);
         }
         free(cfile);
     }
@@ -159,13 +159,19 @@ void tns_clean_cache(void)
 }
 
 
-static inline float clamp(float n, float min, float max) {
-    const float t = n < min ? min : n;
-    return t > max ? max : t;
+typedef struct {
+    float min;
+    float max;
+} FloatRange;
+
+
+static inline float clamp(float n, FloatRange range) {
+    const float t = n < range.min ? range.min : n;
+    return t > range.max ? range.max : t;
 }
 
 
-static void _transform_mark_color_modifier(ThumbnailState *tns) {
+static void transform_mark_color_modifier(ThumbnailState *tns) {
     float af[256], rf[256], gf[256], bf[256];
     for (int i = 255; i >= 0; i--)
         rf [i] = gf [i] = bf [i] = af [i] = (float) i / 255;
@@ -185,10 +191,10 @@ static void _transform_mark_color_modifier(ThumbnailState *tns) {
             af[i] *= MCM_TINT[MCM_A];
 
     for (int i = 255; i != 0 ; i--) {
-        tns->mark_cm->r[i] = clamp(rf[i], 0, 1) * 255;
-        tns->mark_cm->g[i] = clamp(gf[i], 0, 1) * 255;
-        tns->mark_cm->b[i] = clamp(bf[i], 0, 1) * 255;
-        tns->mark_cm->a[i] = clamp(af[i], 0, 1) * 255;
+        tns->mark_cm->r[i] = clamp(rf[i], (FloatRange){.min=0, .max=1}) * 255;
+        tns->mark_cm->g[i] = clamp(gf[i], (FloatRange){.min=0, .max=1}) * 255;
+        tns->mark_cm->b[i] = clamp(bf[i], (FloatRange){.min=0, .max=1}) * 255;
+        tns->mark_cm->a[i] = clamp(af[i], (FloatRange){.min=0, .max=1}) * 255;
     }
 }
 
@@ -214,13 +220,13 @@ void tns_init(ThumbnailState *tns, fileinfo_t *tns_files, const int *thumbnail_c
     for (int i = 255; i >= 0; i--)
         table->a[i] = table->r[i] = table->g[i] = table->b[i] = i;
     tns->mark_cm = table;
-    _transform_mark_color_modifier(tns);
+    transform_mark_color_modifier(tns);
 
     const char *homedir = getenv("XDG_CACHE_HOME");
     const char *dsuffix = "";
     if (homedir == NULL || homedir[0] == '\0') {
         if ((homedir = getenv("HOME")) == NULL)
-            error(EXIT_FAILURE, 0, "Cache directory not found");
+            error_quit(EXIT_FAILURE, 0, "Cache directory not found");
         dsuffix = "/.cache";
     }
 
@@ -287,14 +293,14 @@ CLEANUP void tns_replace(ThumbnailState *tns, fileinfo_t *tns_files, const int *
         for (int i = 255; i >= 0; i--)
             table->a[i] = table->r[i] = table->g[i] = table->b[i] = i;
         tns->mark_cm = table;
-        _transform_mark_color_modifier(tns);
+        transform_mark_color_modifier(tns);
     }
 
     const char *homedir = getenv("XDG_CACHE_HOME");
     const char *dsuffix = "";
     if (homedir == NULL || homedir[0] == '\0') {
         if ((homedir = getenv("HOME")) == NULL)
-            error(EXIT_FAILURE, 0, "Cache directory not found");
+            error_quit(EXIT_FAILURE, 0, "Cache directory not found");
         dsuffix = "/.cache";
     }
 
@@ -331,7 +337,7 @@ static Imlib_Image tns_scale_down(Imlib_Image im, int max_side_size)
         0, 0, w, h,
         MAX(scale * w, 1), MAX(scale * h, 1));
     if (im == NULL)
-        error(EXIT_FAILURE, ENOMEM, NULL);
+        error_quit(EXIT_FAILURE, ENOMEM, NULL);
     imlib_free_image_and_decache();
 
     return im;
@@ -422,7 +428,7 @@ bool tns_load(ThumbnailState *tns, int n, bool force, bool cache_only)
                 }
                 if (w >= max_tn_wh || h >= max_tn_wh) {
                     if ((im = imlib_create_cropped_image(x, y, w, h)) == NULL)
-                        error(0, 0, "%s: error generating thumbnail", file->name);
+                        error_log(0, "%s: error generating thumbnail", file->name);
                 }
                 imlib_free_image_and_decache();
             }
@@ -609,11 +615,11 @@ Imlib_Image apply_filters(Imlib_Image src, ColorModifier *table) {
     imlib_context_set_image(src);
     Imlib_Image clone;
     if (!(clone = imlib_clone_image()))
-        error(EXIT_FAILURE, 0, "Couldn't apply filters to image");
+        error_quit(EXIT_FAILURE, 0, "Couldn't apply filters to image");
     imlib_context_set_image(clone);
     Imlib_Color_Modifier color_modifier;
     if (!(color_modifier = imlib_create_color_modifier()))
-        error(EXIT_FAILURE, 0, "Couldn't apply filters to image");
+        error_quit(EXIT_FAILURE, 0, "Couldn't apply filters to image");
     imlib_context_set_color_modifier(color_modifier);
     imlib_set_color_modifier_tables(table->r, table->g, table->b, table->a);
     imlib_apply_color_modifier();

@@ -94,7 +94,8 @@ bool img_zoom(SxivImage*, int)
 bool img_zoom_to(SxivImage*, float)
     __attribute__((nonnull(1)));
 
-bool img_pos(SxivImage*, float, float)
+// Returns true if the position changed
+bool img_set_position(SxivImage*, float, float)
     __attribute__((nonnull(1)));
 
 bool img_pan(SxivImage*, direction_t, int)

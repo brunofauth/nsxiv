@@ -24,11 +24,12 @@ void* emalloc(size_t);
 void* ecalloc(size_t, size_t);
 void* erealloc(void*, size_t);
 char* estrdup(const char*);
-void error(int, int, const char*, ...);
-int r_opendir(r_dir_t*, const char dirname[], bool recursive) __attribute__((nonnull (1, 2)));
-int r_closedir(r_dir_t*)                                      __attribute__((nonnull (1)));
-char* r_readdir(r_dir_t*, bool skip_dotfiles)                 __attribute__((nonnull (1)));
-int r_mkdir(char*)                                            __attribute__((nonnull (1)));
+void error_quit(int exit_code, int err_num, const char *msg_fmt, ...) __attribute__((noreturn));
+void error_log(int err_num, const char *fmt, ...);
+int r_opendir(r_dir_t*, const char dirname[], bool recursive)   __attribute__((nonnull (1, 2)));
+int r_closedir(r_dir_t*)                                        __attribute__((nonnull (1)));
+char* r_readdir(r_dir_t*, bool skip_dotfiles)                   __attribute__((nonnull (1)));
+int r_mkdir(char*)                                              __attribute__((nonnull (1)));
 void construct_argv(char**, unsigned int, ...);
 pid_t spawn(int*, int*, int, char *const []);
 // }}}

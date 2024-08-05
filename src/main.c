@@ -150,7 +150,7 @@ static void check_add_file(const char *filename, bool given)
         (path = realpath(filename, NULL)) == NULL)
     {
         if (given)
-            error(0, errno, "%s", filename);
+            error_log(errno, "%s", filename);
         return;
     }
 
@@ -176,14 +176,14 @@ static void add_entry(const char *entry_name)
     r_dir_t dir;
 
     if (stat(entry_name, &fstats) < 0) {
-        error(0, errno, "%s", entry_name);
+        error_log(errno, "%s", entry_name);
         return;
     }
     if (!S_ISDIR(fstats.st_mode)) {
         check_add_file(entry_name, true);
     } else {
         if (r_opendir(&dir, entry_name, g_options->recursive) < 0) {
-            error(0, errno, "%s", entry_name);
+            error_log(errno, "%s", entry_name);
             return;
         }
         start = g_fileidx;
@@ -671,7 +671,7 @@ static bool run_key_handler(const char *key, unsigned int mask)
 
     if (keyhandler.f.err) {
         if (!keyhandler.warned) {
-            error(0, keyhandler.f.err, "%s", keyhandler.f.cmd);
+            error_log(keyhandler.f.err, "%s", keyhandler.f.cmd);
             keyhandler.warned = true;
         }
         return false;
@@ -692,7 +692,7 @@ static bool run_key_handler(const char *key, unsigned int mask)
     if ((pid = spawn(NULL, &writefd, 0x0, argv)) < 0)
         return false;
     if ((pfs = fdopen(writefd, "w")) == NULL) {
-        error(0, errno, "open pipe");
+        error_log(errno, "open pipe");
         close(writefd);
         return false;
     }
@@ -942,7 +942,7 @@ static void setup_signal(int sig, void (*handler)(int sig), int flags)
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = flags;
     if (sigaction(sig, &sa, NULL) < 0)
-        error(EXIT_FAILURE, errno, "signal %d", sig);
+        error_quit(EXIT_FAILURE, errno, "signal %d", sig);
 }
 
 
@@ -990,7 +990,7 @@ int main(int argc, char *argv[])
         add_entry(g_options->filenames[i]);
 
     if (g_fileidx == 0)
-        error(EXIT_FAILURE, 0, "No valid image file given, aborting");
+        error_quit(EXIT_FAILURE, 0, "No valid image file given, aborting");
 
     g_filecnt = g_fileidx;
     g_fileidx = g_options->startnum < g_filecnt ? g_options->startnum : 0;
@@ -1007,7 +1007,7 @@ int main(int argc, char *argv[])
             exit(0);
             break;
         case -1:
-            error(0, errno, "fork failed");
+            error_log(errno, "fork failed");
             break;
         }
     }
@@ -1033,7 +1033,7 @@ int main(int argc, char *argv[])
                 cmd[i]->err = errno;
         }
     } else {
-        error(0, 0, "Exec directory not found");
+        error_log(0, "Exec directory not found");
     }
     wintitle.fd = info.fd = -1;
 
