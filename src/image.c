@@ -78,11 +78,11 @@ void img_init(SxivImage *img, win_t *win)
     img->zoom = options->zoom;
     img->zoom = MAX(img->zoom, ZOOM_MIN);
     img->zoom = MIN(img->zoom, ZOOM_MAX);
-    img->checkpan = false;
-    img->dirty = false;
-    img->anti_alias = options->anti_alias;
-    img->alpha_layer = options->alpha_layer;
-    img->autoreload_pending = false;
+
+    img->flags = 0;
+    img->flags |= (ImageFlags[]){0, IF_ANTI_ALIAS_ENABLED}[options->anti_alias];
+    img->flags |= (ImageFlags[]){0, IF_HAS_ALPHA_LAYER}[options->alpha_layer];
+
     img->multi.cap = img->multi.cnt = 0;
     img->multi.animate = options->animate;
     img->multi.framedelay = options->framerate > 0 ? 1000 / options->framerate : 0;
@@ -94,8 +94,8 @@ void img_init(SxivImage *img, win_t *win)
     img->contrast = 0;
     img_change_color_modifier(img, options->gamma, &img->gamma);
 
-    img->ss.on = options->slideshow > 0;
-    img->ss.delay = options->slideshow > 0 ? options->slideshow : SLIDESHOW_DELAY * 10u;
+    img->slideshow_settings.is_enabled = options->slideshow > 0;
+    img->slideshow_settings.delay = options->slideshow > 0 ? options->slideshow : SLIDESHOW_DELAY * 10u;
 }
 
 #if HAVE_LIBEXIF
@@ -324,8 +324,7 @@ bool img_load(SxivImage *img, const fileinfo_t *file)
         img->w = imlib_image_get_width();
         img->h = imlib_image_get_height();
     }
-    img->checkpan = true;
-    img->dirty = true;
+    img->flags |= IF_CHECKPAN | IF_IS_DIRTY;
 
     return true;
 }
@@ -392,7 +391,7 @@ static void img_check_pan(SxivImage *img, const bool moved)
         img->y = win->h - h;
 
     if (!moved && (ox != img->x || oy != img->y))
-        img->dirty = true;
+        img->flags |= IF_IS_DIRTY;
 }
 
 static bool img_fit(SxivImage *img)
@@ -423,7 +422,7 @@ static bool img_fit(SxivImage *img)
 
     if (ABS(img->zoom - z) > 1.0 / MAX(img->w, img->h)) {
         img->zoom = z;
-        img->dirty = true;
+        img->flags |= IF_IS_DIRTY;
         return true;
     } else {
         return false;
@@ -434,12 +433,12 @@ void img_render(SxivImage *img)
 {
     img_fit(img);
 
-    if (img->checkpan) {
+    if (img->flags & IF_CHECKPAN) {
         img_check_pan(img, false);
-        img->checkpan = false;
+        img->flags &= ~IF_CHECKPAN;
     }
 
-    if (!img->dirty)
+    if (!(img->flags & IF_IS_DIRTY))
         return;
 
     win_t *win = img->win;
@@ -476,7 +475,7 @@ void img_render(SxivImage *img)
     win_clear(win);
 
     imlib_context_set_image(img->im);
-    imlib_context_set_anti_alias(img->anti_alias);
+    imlib_context_set_anti_alias(img->flags & IF_ANTI_ALIAS_ENABLED);
     imlib_context_set_drawable(win->buf.pm);
 
     /* manual blending, for performance reasons.
@@ -491,7 +490,7 @@ void img_render(SxivImage *img)
         imlib_context_set_image(bg);
         imlib_image_set_has_alpha(0);
 
-        if (img->alpha_layer) {
+        if (img->flags & IF_HAS_ALPHA_LAYER) {
             const uint32_t col[2] = { 0xFF666666, 0xFF999999 };
             uint32_t *data = imlib_image_get_data();
 
@@ -521,7 +520,7 @@ void img_render(SxivImage *img)
 fallback:
         imlib_render_image_part_on_drawable_at_size(sx, sy, sw, sh, dx, dy, dw, dh);
     }
-    img->dirty = false;
+    img->flags &= ~IF_IS_DIRTY;
 }
 
 bool img_fit_win(SxivImage *img, scalemode_t sm)
@@ -534,7 +533,7 @@ bool img_fit_win(SxivImage *img, scalemode_t sm)
     if (img_fit(img)) {
         img->x = img->win->w / 2 - (img->win->w / 2 - img->x) * img->zoom / oz;
         img->y = img->win->h / 2 - (img->win->h / 2 - img->y) * img->zoom / oz;
-        img->checkpan = true;
+        img->flags |= IF_CHECKPAN;
         return true;
     } else {
         return false;
@@ -556,7 +555,7 @@ bool img_zoom_to(SxivImage *img, float z)
         img->y = y - (y - img->y) * z / img->zoom;
         img->zoom = z;
         img->scalemode = SCALE_ZOOM;
-        img->dirty = img->checkpan = true;
+        img->flags |= IF_CHECKPAN | IF_IS_DIRTY;
         return true;
     } else {
         return false;
@@ -588,7 +587,7 @@ bool img_pos(SxivImage *img, float x, float y)
     img_check_pan(img, true);
 
     if (ox != img->x || oy != img->y) {
-        img->dirty = true;
+        img->flags |= IF_IS_DIRTY;
         return true;
     } else {
         return false;
@@ -655,7 +654,8 @@ bool img_pan_edge(SxivImage *img, direction_t dir)
     img_check_pan(img, true);
 
     if (ox != img->x || oy != img->y) {
-        img->dirty = true;
+        img->flags |= IF_IS_DIRTY;
+
         return true;
     } else {
         return false;
@@ -683,9 +683,9 @@ void img_rotate(SxivImage *img, degree_t d)
         int tmp = img->w;
         img->w = img->h;
         img->h = tmp;
-        img->checkpan = true;
+        img->flags |= IF_CHECKPAN;
     }
-    img->dirty = true;
+    img->flags |= IF_IS_DIRTY;
 }
 
 void img_flip(SxivImage *img, flipdir_t d)
@@ -711,15 +711,15 @@ void img_flip(SxivImage *img, flipdir_t d)
             imlib_flip_op[d]();
         }
     }
-    img->dirty = true;
+    img->flags |= IF_IS_DIRTY;
 }
 
 void img_toggle_antialias(SxivImage *img)
 {
-    img->anti_alias = !img->anti_alias;
+    img->flags = (img->flags & ~IF_ANTI_ALIAS_ENABLED) | (~img->flags & IF_ANTI_ALIAS_ENABLED);
     imlib_context_set_image(img->im);
-    imlib_context_set_anti_alias(img->anti_alias);
-    img->dirty = true;
+    imlib_context_set_anti_alias(img->flags & IF_ANTI_ALIAS_ENABLED);
+    img->flags |= IF_IS_DIRTY;
 }
 
 static double steps_to_range(int d, double max, double offset)
@@ -739,7 +739,7 @@ void img_update_color_modifiers(SxivImage *img)
     if (img->contrast != 0)
         imlib_modify_color_modifier_contrast(steps_to_range(img->contrast, CONTRAST_MAX, 1.0));
 
-    img->dirty = true;
+    img->flags |= IF_IS_DIRTY;
 }
 
 bool img_change_color_modifier(SxivImage *img, int d, int *target)
@@ -765,8 +765,7 @@ static bool img_frame_goto(SxivImage *img, int n)
     imlib_context_set_image(img->im);
     img->w = imlib_image_get_width();
     img->h = imlib_image_get_height();
-    img->checkpan = true;
-    img->dirty = true;
+    img->flags |= IF_CHECKPAN | IF_IS_DIRTY;
 
     return true;
 }

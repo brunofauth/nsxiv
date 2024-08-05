@@ -303,7 +303,7 @@ static bool check_timeouts(int *t)
 
 static void autoreload(void)
 {
-    if (g_img.autoreload_pending) {
+    if (g_img.flags & IF_IS_AUTORELOAD_PENDING) {
         img_close(&g_img, true);
         /* load_image() sets autoreload_pending to false */
         load_image(g_fileidx);
@@ -423,7 +423,7 @@ void load_image(int new)
 
     if (new != current) {
         g_alternate = current;
-        g_img.autoreload_pending = false;
+        g_img.flags &= ~IF_IS_AUTORELOAD_PENDING;
     }
 
     img_close(&g_img, false);
@@ -520,11 +520,11 @@ static void update_info(void)
             strncpy(l->buf, g_files[g_fileidx].name, l->size);
     } else {
         bar_put(r, "%s", mark);
-        if (g_img.ss.on) {
-            if (g_img.ss.delay % 10 != 0)
-                bar_put(r, "%2.1fs" BAR_SEP, (float)g_img.ss.delay / 10);
+        if (g_img.slideshow_settings.is_enabled) {
+            if (g_img.slideshow_settings.delay % 10 != 0)
+                bar_put(r, "%2.1fs" BAR_SEP, (float)g_img.slideshow_settings.delay / 10);
             else
-                bar_put(r, "%ds" BAR_SEP, g_img.ss.delay / 10);
+                bar_put(r, "%ds" BAR_SEP, g_img.slideshow_settings.delay / 10);
         }
         if (g_img.gamma)
             bar_put(r, "G%+d" BAR_SEP, g_img.gamma);
@@ -571,8 +571,8 @@ void redraw(void)
 {
     if (g_mode == MODE_IMAGE) {
         img_render(&g_img);
-        if (g_img.ss.on) {
-            int t = g_img.ss.delay * 100;
+        if (g_img.slideshow_settings.is_enabled) {
+            int t = g_img.slideshow_settings.delay * 100;
             if (g_img.multi.cnt > 0 && g_img.multi.animate)
                 t = MAX(t, g_img.multi.length);
             set_timeout(slideshow, t, false);
@@ -865,7 +865,7 @@ static void run(void)
                 if (pfd[FD_TITLE].revents & POLLHUP)
                     read_title();
                 if ((pfd[FD_ARL].revents & POLLIN) && autoreload_handle_events(&g_state_autoreload)) {
-                    g_img.autoreload_pending = true;
+                    g_img.flags |= IF_IS_AUTORELOAD_PENDING;
                     set_timeout(autoreload, TO_AUTORELOAD, true);
                 }
                 continue;
@@ -906,10 +906,10 @@ static void run(void)
         case ConfigureNotify:
             if (win_configure(&g_win, &ev.xconfigure)) {
                 if (g_mode == MODE_IMAGE) {
-                    g_img.dirty = true;
-                    g_img.checkpan = true;
+                    g_img.flags |= IF_IS_DIRTY;
+                    g_img.flags |= IF_CHECKPAN;
                 } else {
-                    g_tns.dirty = true;
+                    g_img.flags |= IF_IS_DIRTY;
                 }
                 if (!resized) {
                     redraw();

@@ -79,8 +79,8 @@ bool cg_switch_mode(CommandArg _)
             tns_init(&g_tns, g_files, &g_filecnt, &g_fileidx, &g_win);
         img_close(&g_img, false);
         reset_timeout(reset_cursor);
-        if (g_img.ss.on) {
-            g_img.ss.on = false;
+        if (g_img.slideshow_settings.is_enabled) {
+            g_img.slideshow_settings.is_enabled = false;
             reset_timeout(slideshow);
         }
         g_tns.dirty = true;
@@ -99,7 +99,7 @@ bool cg_toggle_fullscreen(CommandArg _)
     /* redraw after next ConfigureNotify event */
     set_timeout(redraw, TO_REDRAW_RESIZE, false);
     if (g_mode == MODE_IMAGE)
-        g_img.checkpan = g_img.dirty = true;
+        g_img.flags |= IF_CHECKPAN | IF_IS_DIRTY;
     else
         g_tns.dirty = true;
     return false;
@@ -110,7 +110,7 @@ bool cg_toggle_bar(CommandArg _)
 {
     win_toggle_bar(&g_win);
     if (g_mode == MODE_IMAGE)
-        g_img.checkpan = g_img.dirty = true;
+        g_img.flags |= IF_CHECKPAN | IF_IS_DIRTY;
     else
         g_tns.dirty = true;
     if (g_win.bar.h > 0)
@@ -428,8 +428,8 @@ bool ci_toggle_antialias(CommandArg _)
 
 bool ci_toggle_alpha(CommandArg _)
 {
-    g_img.alpha_layer = !g_img.alpha_layer;
-    g_img.dirty = true;
+    g_img.flags = (g_img.flags & ~IF_HAS_ALPHA_LAYER) | (~g_img.flags & IF_HAS_ALPHA_LAYER);
+    g_img.flags |= IF_IS_DIRTY;
     return true;
 }
 
@@ -437,14 +437,14 @@ bool ci_toggle_alpha(CommandArg _)
 bool ci_slideshow(CommandArg _)
 {
     if (g_prefix > 0) {
-        g_img.ss.on = true;
-        g_img.ss.delay = g_prefix * 10;
-        set_timeout(slideshow, g_img.ss.delay * 100, true);
-    } else if (g_img.ss.on) {
-        g_img.ss.on = false;
+        g_img.slideshow_settings.is_enabled = true;
+        g_img.slideshow_settings.delay = g_prefix * 10;
+        set_timeout(slideshow, g_img.slideshow_settings.delay * 100, true);
+    } else if (g_img.slideshow_settings.is_enabled) {
+        g_img.slideshow_settings.is_enabled = false;
         reset_timeout(slideshow);
     } else {
-        g_img.ss.on = true;
+        g_img.slideshow_settings.is_enabled = true;
     }
     return true;
 }

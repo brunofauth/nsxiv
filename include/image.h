@@ -34,13 +34,13 @@ typedef struct {
 } ImageFrameSet;
 
 
-enum ImageFlags{
-    IF_CHECKPAN,
-    IF_IS_DIRTY,
-    IF_ANTI_ALIAS_ENABLED,
-    IF_HAS_ALPHA_LAYER,
-    IF_IS_AUTORELOAD_PENDING,
-};
+typedef enum {
+    IF_CHECKPAN = 1,
+    IF_IS_DIRTY = 2,
+    IF_ANTI_ALIAS_ENABLED = 4,
+    IF_HAS_ALPHA_LAYER = 8,
+    IF_IS_AUTORELOAD_PENDING = 16,
+} ImageFlags;
 
 
 typedef struct {
@@ -60,17 +60,12 @@ typedef struct {
     scalemode_t scalemode;
     float zoom;
 
-    // TODO: change these bools for actual flags
-    bool checkpan;
-    bool dirty;
-    bool anti_alias;
-    bool alpha_layer;
-    bool autoreload_pending;
+    ImageFlags flags;
 
     struct {
-        bool on;
+        bool is_enabled;
         int delay;
-    } ss; // secret service? as in USSS?
+    } slideshow_settings;
 
     ImageFrameSet multi;
 } SxivImage;
