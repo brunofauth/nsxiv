@@ -534,27 +534,26 @@ fallback:
 
 bool img_fit_win(SxivImage *img, scalemode_t sm)
 {
-    float oz;
-
-    oz = img->zoom;
-    img->scalemode = sm;
-
     if (!img_fit(img))
         return false;
-
-    img->x = img->win->w / 2 - (img->win->w / 2 - img->x) * img->zoom / oz;
-    img->y = img->win->h / 2 - (img->win->h / 2 - img->y) * img->zoom / oz;
+    
+    float old_zoom = img->zoom;
+    img->scalemode = sm;
+    
+    img->x = img->win->w / 2 - (img->win->w / 2 - img->x) * img->zoom / old_zoom;
+    img->y = img->win->h / 2 - (img->win->h / 2 - img->y) * img->zoom / old_zoom;
     img->flags |= IF_CHECKPAN;
+    
     return true;
 }
 
 
 bool img_zoom_to(SxivImage *img, float z)
 {
-    int x, y;
     if (ZOOM_MIN > z || z > ZOOM_MAX)
         return false;
-
+    
+    int x, y;
     win_cursor_pos(img->win, &x, &y);
     if (x < 0
         || (unsigned int)x >= img->win->w
@@ -588,17 +587,15 @@ bool img_zoom(SxivImage *img, int d)
 
 bool img_set_position(SxivImage *img, float x, float y)
 {
-    float ox, oy;
-
-    ox = img->x;
-    oy = img->y;
+    float old_x = img->x;
+    float old_y = img->y;
 
     img->x = x;
     img->y = y;
 
     img_check_pan(img, true);
 
-    if (ox != img->x || oy != img->y) {
+    if (old_x != img->x || old_y != img->y) {
         img->flags |= IF_IS_DIRTY;
         return true;
     }
@@ -628,10 +625,10 @@ bool img_pan(SxivImage *img, direction_t dir, int d)
     }
 
     switch (dir) {
-    case DIR_LEFT:  return img_move(img, x, 0.0);
-    case DIR_RIGHT: return img_move(img, -x, 0.0);
-    case DIR_UP:    return img_move(img, 0.0, y);
-    case DIR_DOWN:  return img_move(img, 0.0, -y);
+    case DIR_LEFT:  return img_move(img,   x, 0.0);
+    case DIR_RIGHT: return img_move(img,  -x, 0.0);
+    case DIR_UP:    return img_move(img, 0.0,   y);
+    case DIR_DOWN:  return img_move(img, 0.0,  -y);
     }
     return false;
 }
@@ -639,31 +636,28 @@ bool img_pan(SxivImage *img, direction_t dir, int d)
 
 bool img_pan_center(SxivImage *img)
 {
-    float x, y;
-    x = (img->win->w - img->w * img->zoom) / 2.0;
-    y = (img->win->h - img->h * img->zoom) / 2.0;
+    float x = (img->win->w - img->w * img->zoom) / 2.0;
+    float y = (img->win->h - img->h * img->zoom) / 2.0;
     return img_set_position(img, x, y);
 }
 
 
 bool img_pan_edge(SxivImage *img, direction_t dir)
 {
-    float ox, oy;
-
-    ox = img->x;
-    oy = img->y;
-
+    float old_x = img->x;
     if (dir & DIR_LEFT)
         img->x = 0;
     if (dir & DIR_RIGHT)
         img->x = img->win->w - img->w * img->zoom;
+    
+    float old_y = img->y;
     if (dir & DIR_UP)
         img->y = 0;
     if (dir & DIR_DOWN)
         img->y = img->win->h - img->h * img->zoom;
 
     img_check_pan(img, true);
-    if (ox == img->x && oy == img->y)
+    if (old_x == img->x && old_y == img->y)
         return false;
 
     img->flags |= IF_IS_DIRTY;
@@ -700,7 +694,6 @@ void img_rotate(SxivImage *img, degree_t d)
 
 void img_flip(SxivImage *img, flipdir_t d)
 {
-    unsigned int i;
     void (*imlib_flip_op[3])(void) = {
         imlib_image_flip_horizontal,
         imlib_image_flip_vertical,
@@ -715,7 +708,7 @@ void img_flip(SxivImage *img, flipdir_t d)
     imlib_context_set_image(img->im);
     imlib_flip_op[d]();
 
-    for (i = 0; i < img->multi.cnt; i++) {
+    for (unsigned int i = 0; i < img->multi.cnt; i++) {
         if (i != img->multi.sel) {
             imlib_context_set_image(img->multi.frames[i].im);
             imlib_flip_op[d]();
